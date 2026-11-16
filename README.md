@@ -64,7 +64,7 @@ docker-compose.yml
 
 ```bash
 git clone <repository-url>
-cd adrobot
+cd keitaro_campaign
 
 # 1. Подготовка переменных окружения
 cp .env.example .env
