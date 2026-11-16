@@ -9,6 +9,12 @@ export default defineNuxtConfig({
 
   compatibilityDate: '2024-11-01',
 
+  // The SPA shell is content-hashed, so force browsers to revalidate the HTML
+  // on every load; the /_nuxt/* assets keep their own long-lived hashes.
+  routeRules: {
+    '/**': { headers: { 'Cache-Control': 'no-cache' } },
+  },
+
   runtimeConfig: {
     public: {
       // Base URL of the AdRobot backend API (no trailing slash).
