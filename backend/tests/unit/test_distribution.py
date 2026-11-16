@@ -1,4 +1,5 @@
 """Unit tests: traffic distribution calculation."""
+
 from app.domain.value_objects import calculate_distribution
 
 

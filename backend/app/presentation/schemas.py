@@ -182,9 +182,15 @@ class ErrorDetail(BaseModel):
 class OperationItem(BaseModel):
     operation_id: str
     type: str
-    status: Literal["pending", "processing", "completed", "failed"]
+    status: Literal[
+        "pending", "processing", "completed", "failed", "partially_failed", "needs_attention"
+    ]
     campaign_id: int | None = None
+    current_stage: str | None = None
+    progress: int = 0
     error: ErrorDetail | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
     created_at: datetime | None = None
     completed_at: datetime | None = None
 
@@ -200,6 +206,7 @@ class CreateCampaignAccepted(BaseModel):
     operation_id: str
     status: str
     message: str
+    warnings: list[str] = Field(default_factory=list)
 
 
 class ErrorResponse(BaseModel):

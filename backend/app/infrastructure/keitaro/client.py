@@ -38,7 +38,7 @@ class KeitaroClient:
         self._transport = transport
         self._client: httpx.AsyncClient | None = None
         self._cache: dict[str, tuple[float, Any]] = {}
-        self._cache_ttl = 30.0
+        self._cache_ttl = 300.0  # reference data TTL (5 minutes)
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -175,17 +175,24 @@ class KeitaroClient:
         return data if isinstance(data, dict) else {}
 
     # --- references ---
-    async def get_offers(self) -> list[dict[str, Any]]:
+    async def get_offers(self, *, fresh: bool = False) -> list[dict[str, Any]]:
+        if fresh:
+            return self._as_list(await self._get_offers_uncached())
         return self._as_list(await self._cached("offers", self._get_offers_uncached))
 
     async def _get_offers_uncached(self) -> Any:
         return await self._request("GET", "/offers", retry=True)
 
-    async def get_domains(self) -> list[dict[str, Any]]:
+    async def get_domains(self, *, fresh: bool = False) -> list[dict[str, Any]]:
+        if fresh:
+            return self._as_list(await self._get_domains_uncached())
         return self._as_list(await self._cached("domains", self._get_domains_uncached))
 
     async def _get_domains_uncached(self) -> Any:
         return await self._request("GET", "/domains", retry=True)
+
+    def clear_cache(self) -> None:
+        self._cache.clear()
 
     async def get_traffic_sources(self) -> list[dict[str, Any]]:
         return self._as_list(

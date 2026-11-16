@@ -19,8 +19,8 @@ class StreamService:
     async def update_offers(self, cmd: UpdateOffersCommand) -> dict:
         offers = value_objects.validate_offer_shares(cmd.offers, require_at_least_one=True)
 
-        # Validate offers exist and are active.
-        all_offers = await self.keitaro.get_offers()
+        # Validate offers exist and are active (bypass cache to re-check live state).
+        all_offers = await self.keitaro.get_offers(fresh=True)
         offers_by_id = {o["id"]: o for o in all_offers}
         for entry in offers:
             offer = offers_by_id.get(entry["offer_id"])

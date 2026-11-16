@@ -49,4 +49,42 @@ campaign and two flows (campaign id `212170`), and by exercising the offer edito
 3. Flows are created with **`type="regular"`**, `position` 1 and 2, `weight=0`.
 4. Offer `share` is validated as an **integer in `1..100`** in the domain layer.
 5. `/offers` provides no server-side search/pagination, so AdRobot fetches the list and
-   filters/paginates in its own backend (cached briefly).
+   filters/paginates in its own backend (cached for 5 minutes, refreshable).
+
+## Contract verification — point by point
+
+The specific ambiguities called out in the task are resolved as follows (all against the
+live instance):
+
+| Concern | Verdict | Evidence |
+|---|---|---|
+| `POST /campaigns` `group_id` type | **Integer** | `group_id: 10332` (int) accepted; response echoes `"group_id":10332`. |
+| `POST /streams` filter — is `id` required? | **No** | `filters: [{"name":"country","mode":"accept","payload":["AU","MX"]}]` accepted without `id`; the response adds `id`/`stream_id`/`oid`. |
+| `GET /streams` `filters.payload` format | **Array of strings** | Verified `"payload":["AU","MX"]` in GET responses (not a string). |
+| `PUT /streams/{id}` nested ids | **Strip read-only fields** | `id`, `stream_id`, `oid`, `created_at`, `updated_at` are not sent back; `build_stream_update_payload()` does this conversion inside the adapter. Verified add/remove works. |
+| `cost_auto` for CPC | **`true` accepted** | Campaign created with `"cost_auto": true`; response echoes it. |
+| `action_options` vs `http` | **`action_options` stays `null`** | The URL belongs in `action_payload` (string); the task's `action_options: {url}` shape is not used. |
+
+Adapter rule (documented for the task): every Keitaro endpoint must have a verified
+Request/Response example, and all Keitaro model conversion must live inside the adapter
+(`app/infrastructure/keitaro/client.py` + `app/application/services/campaign_builder.py`).
+
+## Routing verification
+
+Routing model: flows are ordered by `position`; the first flow whose filters match wins,
+otherwise the next flow is tried. The Offer Flow has **no filters**, so it is the fallback.
+
+| Scenario | Expected | Verified how |
+|---|---|---|
+| Country is in selected GEO | Google Redirect | Filter `country` `accept` + `position=1` (config verified by API) |
+| Country is NOT in selected GEO | Offer Flow | Offer Flow has no filters (fallback) |
+| Country unknown / not resolved | Offer Flow (fallback) | Needs a live click test — see note |
+| Multiple GEO selected | Google Redirect | `payload: ["AU","MX"]` accepted |
+| Offers have different weights | split by `share / sum(shares)` | Formula is pure and unit-tested; `share` range verified |
+
+> **Not fully automated yet:** a *real* click through the campaign URL (to observe the
+> redirect target for a given visitor country, and the "unknown GEO" / "no offers" edge
+> cases) requires driving actual traffic with known source IPs. The click URL for a
+> campaign is `<domain>/<campaign-token>/<alias-or-params>`; the domain, token and alias
+> are all available from the campaign object. This should be confirmed with a manual click
+> test before production use.

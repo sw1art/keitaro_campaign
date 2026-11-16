@@ -48,12 +48,19 @@ Request:
 Response `202 Accepted`:
 
 ```json
-{ "operation_id": "6f4c...", "status": "pending", "message": "Campaign creation started" }
+{
+  "operation_id": "6f4c...",
+  "status": "pending",
+  "message": "Campaign creation started",
+  "warnings": []
+}
 ```
+
+`warnings` carries non-blocking advisories (e.g. selected GEO does not overlap the offers' GEO).
 
 ### `GET /campaigns` — list campaigns (live from Keitaro)
 
-Query: `search`, `state`, `page` (default 1), `page_size` (default 20).
+Query: `search`, `state`, `sort_by` (`id`|`name`|`state`|`created_at`|`updated_at`, default `created_at`), `sort_order` (`asc`|`desc`, default `desc`), `page` (default 1), `page_size` (default 20).
 
 ```json
 {
@@ -187,15 +194,21 @@ Query: `page`, `page_size`. Sorted newest first.
 {
   "operation_id": "6f4c...",
   "type": "campaign.create",
-  "status": "pending",
-  "campaign_id": null,
+  "status": "completed",
+  "campaign_id": 212138,
+  "current_stage": "completed",
+  "progress": 100,
   "error": null,
+  "started_at": "2026-11-16T19:46:32Z",
+  "finished_at": "2026-11-16T19:46:36Z",
   "created_at": "2026-11-16T19:46:32Z",
-  "completed_at": null
+  "completed_at": "2026-11-16T19:46:36Z"
 }
 ```
 
-Statuses: `pending` | `processing` | `completed` | `failed`.
+Statuses: `pending` | `processing` | `completed` | `failed` | `partially_failed` | `needs_attention`.
+
+Saga stages (`current_stage` / `progress`): `creating_campaign` (20) → `creating_google_stream` (40) → `creating_offer_stream` (60) → `verifying` (80) → `completed` (100).
 
 On failure `error` is `{ "code": "KEITARO_STREAM_CREATION_FAILED", "message": "..." }`.
 
@@ -284,6 +297,11 @@ Query: `search` (matches name or id), `state` (default `active`), `page`, `page_
 
 ## System
 
-- `GET /healthz` — liveness (no dependency checks).
-- `GET /readyz` — readiness; checks database, RabbitMQ and Keitaro, returns `200` when all are ok or `503` with per-dependency status.
+- `GET /healthz` (and `GET /health/live`) — liveness (no dependency checks).
+- `GET /readyz` (and `GET /health/ready`) — readiness; checks database, RabbitMQ and Keitaro, returns `200` when all are ok or `503` with per-dependency status.
+- `GET /health/keitaro` — checks Keitaro reachability only.
+
+### `POST /dictionaries/refresh` — clear reference cache
+
+Clears the in-memory cache for offers/domains/traffic sources (TTL is 5 minutes by default).
 

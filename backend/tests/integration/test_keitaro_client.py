@@ -1,4 +1,5 @@
 """Integration tests for KeitaroClient using a mocked HTTP transport."""
+
 from __future__ import annotations
 
 import httpx

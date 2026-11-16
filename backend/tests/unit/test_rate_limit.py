@@ -1,4 +1,5 @@
 """Unit tests: in-memory rate limiter."""
+
 import pytest
 
 from app.presentation.middleware import _RateLimiter

@@ -41,6 +41,8 @@ EVENT_TYPE_CREATE = "campaign.create"
 async def list_campaigns(
     search: str | None = Query(default=None),
     state: str | None = Query(default=None),
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     keitaro: KeitaroClient = Depends(get_keitaro),
@@ -49,6 +51,12 @@ async def list_campaigns(
     # Client-side state filter in case the Keitaro endpoint ignores `state`.
     if state:
         raw = [c for c in raw if c.get("state") == state]
+
+    sortable = {"id", "name", "state", "created_at", "updated_at"}
+    key = sort_by if sort_by in sortable else "created_at"
+    reverse = sort_order.lower() != "asc"
+    raw.sort(key=lambda c: c.get(key) or "", reverse=reverse)
+
     total = len(raw)
     start = (page - 1) * page_size
     page_items = raw[start : start + page_size]
@@ -83,6 +91,7 @@ async def create_campaign(
     )
     # Synchronous validation against live references.
     await service.validate_input(cmd, valid_geo_codes=get_valid_geo_codes())
+    warnings = await service.collect_warnings(cmd)
 
     # Transactional outbox: operation + event in a single transaction.
     operation = Operation(
@@ -111,6 +120,7 @@ async def create_campaign(
         operation_id=str(operation.id),
         status="pending",
         message="Campaign creation started",
+        warnings=warnings,
     )
 
 

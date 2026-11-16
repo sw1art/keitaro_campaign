@@ -1,4 +1,5 @@
 """Integration tests: campaign creation orchestration (idempotency, resume)."""
+
 from __future__ import annotations
 
 from uuid import uuid4
@@ -26,10 +27,10 @@ class FakeKeitaro:
         self._next_campaign = 100
         self._next_stream = 1000
 
-    async def get_offers(self):
+    async def get_offers(self, *, fresh: bool = False):
         return self.offers
 
-    async def get_domains(self):
+    async def get_domains(self, *, fresh: bool = False):
         return self.domains
 
     async def create_campaign(self, payload):

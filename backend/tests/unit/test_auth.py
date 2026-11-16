@@ -1,4 +1,5 @@
 """Unit tests: optional API token auth."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace

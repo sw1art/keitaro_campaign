@@ -1,4 +1,4 @@
-"""Campaign creation orchestration (use case)."""
+"""Campaign creation orchestration (use case) — implemented as a saga."""
 
 from __future__ import annotations
 
@@ -9,7 +9,12 @@ from typing import Any
 from uuid import uuid4
 
 from app.application.dto import CreateCampaignCommand
-from app.application.errors import KeitaroApiError, PermanentError, RetryableError
+from app.application.errors import (
+    KeitaroApiError,
+    KeitaroUnavailableError,
+    PermanentError,
+    RetryableError,
+)
 from app.application.interfaces import KeitaroClientProtocol
 from app.application.services import campaign_builder
 from app.config import Settings
@@ -20,6 +25,14 @@ from app.domain.repositories import (
     AuditRepository,
     CampaignRepository,
     OperationRepository,
+)
+from app.domain.stages import (
+    STAGE_COMPLETED,
+    STAGE_CREATING_CAMPAIGN,
+    STAGE_CREATING_GOOGLE_STREAM,
+    STAGE_CREATING_OFFER_STREAM,
+    STAGE_VERIFYING,
+    progress_for_stage,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,10 +52,14 @@ def classify_keitaro_error(exc: KeitaroApiError) -> Exception:
 
 
 class CampaignCreationService:
-    """Creates a Keitaro campaign with two flows. Idempotent and resumable.
+    """Creates a Keitaro campaign with two flows, as a resumable saga.
 
-    Progress is committed to ``operation.result`` after each step, so a retried
-    message reuses already-created entities instead of duplicating them.
+    Each step records its stage and the created Keitaro id in ``operation.result``,
+    so a redelivered message resumes instead of duplicating entities.
+
+    On a create timeout the saga first tries to discover whether Keitaro actually
+    created the object (by name), and only then fails/retries — it never blindly
+    re-POSTs a request whose outcome is unknown.
     """
 
     def __init__(
@@ -70,7 +87,7 @@ class CampaignCreationService:
         if not cmd.offer_ids:
             raise ValidationError("At least one offer must be selected.")
 
-        offers = await self.keitaro.get_offers()
+        offers = await self.keitaro.get_offers(fresh=True)
         offers_by_id = {o["id"]: o for o in offers}
         for offer_id in cmd.offer_ids:
             offer = offers_by_id.get(offer_id)
@@ -79,7 +96,7 @@ class CampaignCreationService:
             if offer.get("state") != "active":
                 raise ValidationError(f"Offer {offer_id} is not active.")
 
-        domains = await self.keitaro.get_domains()
+        domains = await self.keitaro.get_domains(fresh=True)
         domain = next((d for d in domains if d["id"] == cmd.domain_id), None)
         if domain is None:
             raise ValidationError(f"Domain {cmd.domain_id} not found in Keitaro.")
@@ -88,74 +105,81 @@ class CampaignCreationService:
 
         return list(dict.fromkeys(cmd.offer_ids))
 
-    async def create(self, operation: Operation) -> Operation:
-        """Execute (or resume) campaign creation.
+    async def collect_warnings(self, cmd: CreateCampaignCommand) -> list[str]:
+        """Soft, non-blocking warnings (e.g. GEO/offer audience mismatch)."""
+        warnings: list[str] = []
+        try:
+            offers = await self.keitaro.get_offers()
+            offer_countries: set[str] = set()
+            for offer_id in cmd.offer_ids:
+                offer = next((o for o in offers if o.get("id") == offer_id), None)
+                if offer:
+                    offer_countries.update(offer.get("country") or [])
+            selected = set(cmd.geo)
+            if selected and offer_countries and not (selected & offer_countries):
+                warnings.append(
+                    "Выбранные GEO не пересекаются с GEO доступных офферов — "
+                    "проверьте аудиторию кампании."
+                )
+        except Exception:  # noqa: BLE001 - warnings are best-effort
+            logger.exception("Failed to collect create warnings")
+        return warnings
 
-        Raises RetryableError for transient problems and PermanentError for
-        non-recoverable problems.
-        """
+    async def create(self, operation: Operation) -> Operation:
+        """Execute (or resume) the saga. Raises RetryableError / PermanentError."""
         cmd = CreateCampaignCommand(**operation.payload)
         result: dict = dict(operation.result or {})
 
         # 1. Campaign
+        await self._set_stage(operation, STAGE_CREATING_CAMPAIGN)
         keitaro_campaign_id = result.get("keitaro_campaign_id")
         if not keitaro_campaign_id:
             alias = f"adrobot-{operation.id.hex[:12]}"
-            created = await self._call(
-                self.keitaro.create_campaign,
-                campaign_builder.build_campaign_payload(
-                    cmd.name,
-                    cmd.domain_id,
-                    alias=alias,
-                    group_id=self.settings.keitaro_group_id,
-                    traffic_source_id=self.settings.keitaro_traffic_source_id,
-                ),
-            )
-            keitaro_campaign_id = int(created["id"])
+            keitaro_campaign_id = await self._create_campaign_reconciled(cmd, alias)
             result["keitaro_campaign_id"] = keitaro_campaign_id
             operation.result = result
-            await self.operations.save(operation)
             await self._audit(operation, "campaign.create", "campaign", keitaro_campaign_id)
             await self.commit()
 
         # 2. Google Redirect flow
+        await self._set_stage(operation, STAGE_CREATING_GOOGLE_STREAM)
         google_stream_id = result.get("google_stream_id")
         if not google_stream_id:
-            created = await self._call(
-                self.keitaro.create_stream,
+            google_stream_id = await self._create_stream_reconciled(
+                keitaro_campaign_id,
+                "Google Redirect",
                 campaign_builder.build_google_stream_payload(
                     keitaro_campaign_id,
                     cmd.geo,
                     google_url=self.settings.google_redirect_url,
                 ),
             )
-            google_stream_id = int(created["id"])
             result["google_stream_id"] = google_stream_id
             operation.result = result
-            await self.operations.save(operation)
             await self._audit(operation, "stream.create", "stream", google_stream_id)
             await self.commit()
 
         # 3. Offer Flow
+        await self._set_stage(operation, STAGE_CREATING_OFFER_STREAM)
         offer_stream_id = result.get("offer_stream_id")
         if not offer_stream_id:
             offers = [{"offer_id": oid} for oid in cmd.offer_ids]
-            created = await self._call(
-                self.keitaro.create_stream,
+            offer_stream_id = await self._create_stream_reconciled(
+                keitaro_campaign_id,
+                "Offer Flow",
                 campaign_builder.build_offer_stream_payload(
                     keitaro_campaign_id,
                     offers,
                     default_share=self.settings.default_offer_share,
                 ),
             )
-            offer_stream_id = int(created["id"])
             result["offer_stream_id"] = offer_stream_id
             operation.result = result
-            await self.operations.save(operation)
             await self._audit(operation, "stream.create", "stream", offer_stream_id)
             await self.commit()
 
         # 4. Verify the created configuration
+        await self._set_stage(operation, STAGE_VERIFYING)
         await self._verify(keitaro_campaign_id, cmd, google_stream_id, offer_stream_id)
 
         # 5. Persist local campaign registry
@@ -170,16 +194,67 @@ class CampaignCreationService:
             local = await self.campaigns.add(local)
         operation.campaign_id = local.id
         operation.keitaro_campaign_id = keitaro_campaign_id
+        operation.current_stage = STAGE_COMPLETED
+        operation.progress = progress_for_stage(STAGE_COMPLETED)
         await self.operations.save(operation)
         await self.commit()
 
         return operation
 
-    async def _call(self, fn: Callable[..., Awaitable[Any]], *args: Any) -> Any:
+    async def _set_stage(self, operation: Operation, stage: str) -> None:
+        operation.current_stage = stage
+        operation.progress = progress_for_stage(stage)
+        await self.operations.save(operation)
+        await self.commit()
+
+    async def _create_campaign_reconciled(self, cmd: CreateCampaignCommand, alias: str) -> int:
+        payload = campaign_builder.build_campaign_payload(
+            cmd.name,
+            cmd.domain_id,
+            alias=alias,
+            group_id=self.settings.keitaro_group_id,
+            traffic_source_id=self.settings.keitaro_traffic_source_id,
+        )
         try:
-            return await fn(*args)
+            created = await self.keitaro.create_campaign(payload)
+            return int(created["id"])
+        except KeitaroUnavailableError as exc:
+            existing = await self._find_campaign_by_name(cmd.name)
+            if existing is not None:
+                logger.warning("Campaign '%s' already created (recovered from timeout)", cmd.name)
+                return int(existing["id"])
+            raise RetryableError(str(exc)) from exc
         except KeitaroApiError as exc:
             raise classify_keitaro_error(exc) from exc
+
+    async def _create_stream_reconciled(
+        self, campaign_id: int, name: str, payload: dict[str, Any]
+    ) -> int:
+        try:
+            created = await self.keitaro.create_stream(payload)
+            return int(created["id"])
+        except KeitaroUnavailableError as exc:
+            existing = await self._find_stream_by_name(campaign_id, name)
+            if existing is not None:
+                logger.warning("Stream '%s' already created (recovered from timeout)", name)
+                return int(existing["id"])
+            raise RetryableError(str(exc)) from exc
+        except KeitaroApiError as exc:
+            raise classify_keitaro_error(exc) from exc
+
+    async def _find_campaign_by_name(self, name: str) -> dict[str, Any] | None:
+        try:
+            campaigns = await self.keitaro.get_campaigns(query=name)
+        except Exception:  # noqa: BLE001
+            return None
+        return next((c for c in campaigns if c.get("name") == name), None)
+
+    async def _find_stream_by_name(self, campaign_id: int, name: str) -> dict[str, Any] | None:
+        try:
+            streams = await self.keitaro.get_streams(campaign_id)
+        except Exception:  # noqa: BLE001
+            return None
+        return next((s for s in streams if s.get("name") == name), None)
 
     async def _verify(
         self,

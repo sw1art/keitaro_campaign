@@ -1,4 +1,5 @@
 """Unit tests: stream offer editing (optimistic concurrency)."""
+
 from __future__ import annotations
 
 import pytest
@@ -16,7 +17,7 @@ class FakeKeitaro:
         self.stream = stream
         self.updated: dict | None = None
 
-    async def get_offers(self):
+    async def get_offers(self, *, fresh: bool = False):
         return self.offers
 
     async def get_stream(self, stream_id):

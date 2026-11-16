@@ -6,7 +6,14 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
-OperationStatuses = ("pending", "processing", "completed", "failed")
+OperationStatuses = (
+    "pending",
+    "processing",
+    "completed",
+    "failed",
+    "partially_failed",
+    "needs_attention",
+)
 
 
 @dataclass
@@ -30,6 +37,10 @@ class Operation:
     attempts: int = 0
     campaign_id: UUID | None = None
     keitaro_campaign_id: int | None = None
+    current_stage: str | None = None
+    progress: int = 0
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     completed_at: datetime | None = None

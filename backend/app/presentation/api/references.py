@@ -20,6 +20,15 @@ from app.presentation.schemas import (
 router = APIRouter(tags=["references"])
 
 
+@router.post("/dictionaries/refresh", tags=["references"])
+async def refresh_dictionaries(
+    keitaro: KeitaroClient = Depends(get_keitaro),
+) -> dict:
+    """Clear the in-memory reference cache (offers/domains/traffic sources)."""
+    keitaro.clear_cache()
+    return {"status": "ok", "message": "Reference cache cleared"}
+
+
 @router.get("/offers", response_model=OfferListResponse)
 async def list_offers(
     search: str | None = Query(default=None),

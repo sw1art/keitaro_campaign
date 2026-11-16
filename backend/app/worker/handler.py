@@ -1,4 +1,4 @@
-"""Worker: campaign.create message handler (idempotent)."""
+"""Worker: campaign.create message handler (idempotent saga runner)."""
 
 from __future__ import annotations
 
@@ -22,6 +22,12 @@ logger = logging.getLogger(__name__)
 ACK = "ack"
 RETRY = "retry"
 DEAD_LETTER = "dead_letter"
+
+_PARTIAL_KEYS = ("keitaro_campaign_id", "google_stream_id", "offer_stream_id")
+
+
+def _has_partial_result(result: dict | None) -> bool:
+    return bool(result) and any(result.get(k) for k in _PARTIAL_KEYS)
 
 
 class CampaignCreateHandler:
@@ -54,6 +60,8 @@ class CampaignCreateHandler:
 
             operation.status = "processing"
             operation.attempts += 1
+            if operation.started_at is None:
+                operation.started_at = utcnow()
             await repos.operations.save(operation)
             await session.commit()
 
@@ -70,8 +78,15 @@ class CampaignCreateHandler:
             except RetryableError as exc:
                 operation = await repos.operations.get(operation_id)
                 if operation is not None and operation.attempts >= topology.MAX_ATTEMPTS:
+                    status = (
+                        "partially_failed" if _has_partial_result(operation.result) else "failed"
+                    )
                     await self._fail(
-                        repos.operations, operation, exc, code="KEITARO_OPERATION_FAILED"
+                        repos.operations,
+                        operation,
+                        exc,
+                        code="KEITARO_OPERATION_FAILED",
+                        status=status,
                     )
                     await session.commit()
                     return DEAD_LETTER
@@ -89,8 +104,15 @@ class CampaignCreateHandler:
             except PermanentError as exc:
                 operation = await repos.operations.get(operation_id)
                 if operation is not None:
+                    status = (
+                        "needs_attention" if _has_partial_result(operation.result) else "failed"
+                    )
                     await self._fail(
-                        repos.operations, operation, exc, code="KEITARO_OPERATION_FAILED"
+                        repos.operations,
+                        operation,
+                        exc,
+                        code="KEITARO_OPERATION_FAILED",
+                        status=status,
                     )
                     await session.commit()
                 return DEAD_LETTER
@@ -98,7 +120,12 @@ class CampaignCreateHandler:
                 logger.exception("Unexpected error processing %s", operation_id)
                 operation = await repos.operations.get(operation_id)
                 if operation is not None:
-                    await self._fail(repos.operations, operation, exc, code="INTERNAL_ERROR")
+                    status = (
+                        "needs_attention" if _has_partial_result(operation.result) else "failed"
+                    )
+                    await self._fail(
+                        repos.operations, operation, exc, code="INTERNAL_ERROR", status=status
+                    )
                     await session.commit()
                 return DEAD_LETTER
 
@@ -106,6 +133,7 @@ class CampaignCreateHandler:
             if operation is not None:
                 operation.status = "completed"
                 operation.completed_at = utcnow()
+                operation.finished_at = utcnow()
                 await repos.operations.save(operation)
                 await session.commit()
             return ACK
@@ -117,9 +145,12 @@ class CampaignCreateHandler:
         exc: Exception,
         *,
         code: str,
+        status: str,
     ) -> None:
-        operation.status = "failed"
+        operation.status = status
         message = str(exc) or "Operation failed"
         operation.error = {"code": code, "message": message}
-        operation.completed_at = utcnow()
+        now = utcnow()
+        operation.completed_at = now
+        operation.finished_at = now
         await operations.save(operation)

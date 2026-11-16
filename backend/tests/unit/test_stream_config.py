@@ -1,4 +1,5 @@
 """Unit tests: Keitaro payload builders."""
+
 from app.application.services.campaign_builder import (
     build_campaign_payload,
     build_google_stream_payload,
@@ -22,18 +23,14 @@ def test_build_campaign_payload():
 
 
 def test_build_google_stream_payload():
-    payload = build_google_stream_payload(
-        123, ["AU", "MX"], google_url="https://google.com"
-    )
+    payload = build_google_stream_payload(123, ["AU", "MX"], google_url="https://google.com")
     assert payload["campaign_id"] == 123
     assert payload["schema"] == "redirect"
     assert payload["action_type"] == "http"
     assert payload["action_payload"] == "https://google.com"
     assert payload["position"] == 1
     assert payload["offers"] == []
-    assert payload["filters"] == [
-        {"name": "country", "mode": "accept", "payload": ["AU", "MX"]}
-    ]
+    assert payload["filters"] == [{"name": "country", "mode": "accept", "payload": ["AU", "MX"]}]
 
 
 def test_build_offer_stream_payload():
@@ -66,7 +63,16 @@ def test_build_stream_update_payload_strips_readonly_fields():
         "weight": 0,
         "offer_selection": "before_click",
         "comments": "",
-        "filters": [{"id": 1, "stream_id": 1311445, "name": "country", "mode": "accept", "payload": ["RO"], "oid": 1}],
+        "filters": [
+            {
+                "id": 1,
+                "stream_id": 1311445,
+                "name": "country",
+                "mode": "accept",
+                "payload": ["RO"],
+                "oid": 1,
+            }
+        ],
         "triggers": [],
         "landings": [],
         "offers": [

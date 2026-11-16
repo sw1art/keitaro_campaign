@@ -50,14 +50,33 @@ needs to manage operations and history:
 - `outbox_events` — transactional outbox for reliable event publishing.
 - `audit_logs` — history of significant actions.
 
-## Async campaign creation
+## Async campaign creation (Saga)
 
-1. `POST /api/v1/campaigns` validates input (against live Keitaro references) synchronously.
+1. `POST /api/v1/campaigns` validates input (against live Keitaro references) synchronously
+   and collects non-blocking warnings (e.g. GEO/offer audience mismatch).
 2. It writes an `Operation` (`pending`) and an `OutboxEvent` in **one transaction** and returns `202`.
 3. A best-effort background task publishes the event to RabbitMQ; the Worker's outbox
    poller is the reliable fallback if the broker was down.
-4. The Worker consumes `campaign.create`, runs `CampaignCreationService`, and updates the
-   operation status (`processing` → `completed`/`failed`).
+4. The Worker consumes `campaign.create` and runs `CampaignCreationService` as a **saga**:
+
+```text
+pending → creating_campaign → creating_google_stream → creating_offer_stream → verifying → completed
+```
+
+Each stage records its progress in `operation.current_stage`/`progress` and stores the
+created Keitaro id in `operation.result`, so a redelivered message resumes instead of
+duplicating. Terminal statuses:
+
+- `completed` — everything created and verified;
+- `failed` — nothing (or nothing recoverable) was created;
+- `partially_failed` — some entities created, then a retryable error exhausted its attempts;
+- `needs_attention` — some entities created but auto-recovery is impossible (e.g. a
+  permanent/verify error) — manual reconciliation required.
+
+On a create timeout the saga first checks whether Keitaro actually created the object
+(by name) before failing — it never blindly re-POSTs a request whose outcome is unknown.
+Compensating actions are deliberately not automated (they need a confirmed, safe Keitaro
+method first).
 
 ## RabbitMQ topology
 
@@ -73,6 +92,15 @@ service commits progress (`keitaro_campaign_id`, `google_stream_id`, `offer_stre
 to `operation.result` after each step, so a redelivered message reuses already-created
 entities instead of creating duplicates. The handler returns `ack` for an operation that
 is already `completed`.
+
+## Reference caching
+
+Offers, domains and traffic sources are cached in-memory for 5 minutes (TTL) inside
+`KeitaroClient`. `POST /api/v1/dictionaries/refresh` clears the cache. On save paths
+(campaign pre-validation and offer editing) the cache is **bypassed** (`fresh=True`) so a
+stale cached offer/domain state can never be persisted. Keitaro remains the source of
+truth: the campaigns list/details are read live from Keitaro, so campaigns created outside
+AdRobot are fully searchable and editable.
 
 ## Security & hardening
 

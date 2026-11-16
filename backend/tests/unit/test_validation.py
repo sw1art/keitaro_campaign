@@ -1,4 +1,5 @@
 """Unit tests: GEO and offer share validation."""
+
 import pytest
 
 from app.domain.exceptions import BusinessRuleError, ValidationError
@@ -64,9 +65,7 @@ def test_validate_offer_shares_zero():
 
 def test_validate_offer_shares_duplicate_offer():
     with pytest.raises(ValidationError):
-        validate_offer_shares(
-            [{"offer_id": 1, "share": 10}, {"offer_id": 1, "share": 20}]
-        )
+        validate_offer_shares([{"offer_id": 1, "share": 10}, {"offer_id": 1, "share": 20}])
 
 
 def test_validate_offer_shares_over_100():

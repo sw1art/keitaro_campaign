@@ -92,13 +92,15 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     @app.get("/healthz", tags=["system"])
-    async def healthz() -> dict:
-        """Liveness probe (no dependency checks)."""
-        return {"status": "ok"}
+    async def _check_keitaro(request: Request) -> str:
+        try:
+            await get_keitaro(request).get_stream_types()
+            return "ok"
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("health: keitaro check failed: %s", exc)
+            return "error"
 
-    @app.get("/readyz", tags=["system"])
-    async def readyz(request: Request) -> JSONResponse:
-        """Readiness probe: DB + RabbitMQ + Keitaro reachability."""
+    async def _readiness_checks(request: Request) -> dict[str, str]:
         checks: dict[str, str] = {}
 
         try:
@@ -106,27 +108,53 @@ def create_app() -> FastAPI:
                 await session.execute(text("SELECT 1"))
             checks["database"] = "ok"
         except Exception as exc:  # noqa: BLE001
-            logger.warning("readiness: database check failed: %s", exc)
+            logger.warning("health: database check failed: %s", exc)
             checks["database"] = "error"
 
         try:
             await get_publisher(request).connect()
             checks["rabbitmq"] = "ok"
         except Exception as exc:  # noqa: BLE001
-            logger.warning("readiness: rabbitmq check failed: %s", exc)
+            logger.warning("health: rabbitmq check failed: %s", exc)
             checks["rabbitmq"] = "error"
 
-        try:
-            await get_keitaro(request).get_stream_types()
-            checks["keitaro"] = "ok"
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("readiness: keitaro check failed: %s", exc)
-            checks["keitaro"] = "error"
+        checks["keitaro"] = await _check_keitaro(request)
+        return checks
 
+    @app.get("/healthz", tags=["system"])
+    async def healthz() -> dict:
+        """Liveness probe (no dependency checks)."""
+        return {"status": "ok"}
+
+    @app.get("/readyz", tags=["system"])
+    async def readyz(request: Request) -> JSONResponse:
+        """Readiness probe: DB + RabbitMQ + Keitaro reachability."""
+        checks = await _readiness_checks(request)
         healthy = all(v == "ok" for v in checks.values())
         return JSONResponse(
             status_code=200 if healthy else 503,
             content={"status": "ok" if healthy else "degraded", "checks": checks},
+        )
+
+    @app.get("/health/live", tags=["system"])
+    async def health_live() -> dict:
+        return {"status": "ok"}
+
+    @app.get("/health/ready", tags=["system"])
+    async def health_ready(request: Request) -> JSONResponse:
+        checks = await _readiness_checks(request)
+        healthy = all(v == "ok" for v in checks.values())
+        return JSONResponse(
+            status_code=200 if healthy else 503,
+            content={"status": "ok" if healthy else "degraded", "checks": checks},
+        )
+
+    @app.get("/health/keitaro", tags=["system"])
+    async def health_keitaro(request: Request) -> JSONResponse:
+        status = await _check_keitaro(request)
+        return JSONResponse(
+            status_code=200 if status == "ok" else 503,
+            content={"status": status, "checks": {"keitaro": status}},
         )
 
     return app

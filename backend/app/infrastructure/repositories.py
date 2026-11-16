@@ -84,6 +84,10 @@ class SqlOperationRepository:
             result=operation.result,
             error=operation.error,
             attempts=operation.attempts,
+            current_stage=operation.current_stage,
+            progress=operation.progress,
+            started_at=operation.started_at,
+            finished_at=operation.finished_at,
             created_at=operation.created_at or _utcnow(),
             updated_at=operation.updated_at or _utcnow(),
             completed_at=operation.completed_at,
@@ -109,6 +113,10 @@ class SqlOperationRepository:
         model.result = operation.result
         model.error = operation.error
         model.attempts = operation.attempts
+        model.current_stage = operation.current_stage
+        model.progress = operation.progress
+        model.started_at = operation.started_at
+        model.finished_at = operation.finished_at
         model.completed_at = operation.completed_at
         model.updated_at = _utcnow()
         await self.session.flush()
@@ -149,6 +157,10 @@ class SqlOperationRepository:
             result=model.result,
             error=model.error,
             attempts=model.attempts,
+            current_stage=model.current_stage,
+            progress=model.progress or 0,
+            started_at=model.started_at,
+            finished_at=model.finished_at,
             created_at=model.created_at,
             updated_at=model.updated_at,
             completed_at=model.completed_at,

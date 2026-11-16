@@ -27,7 +27,11 @@ def map_operation(op: Operation) -> OperationItem:
         type=op.type,
         status=op.status,
         campaign_id=op.keitaro_campaign_id,
+        current_stage=op.current_stage,
+        progress=op.progress,
         error=error,
+        started_at=op.started_at,
+        finished_at=op.finished_at,
         created_at=op.created_at,
         completed_at=op.completed_at,
     )
