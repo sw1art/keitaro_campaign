@@ -53,6 +53,9 @@ class KeitaroClientProtocol(ABC):
     async def get_stream_filters(self) -> list[dict[str, Any]]: ...
 
     @abstractmethod
+    async def build_report(self, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+    @abstractmethod
     async def clear_cache(self) -> None: ...
 
 

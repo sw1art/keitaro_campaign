@@ -88,6 +88,14 @@ async def list_traffic_sources(
     return TrafficSourceListResponse(items=items)
 
 
+@router.get("/groups")
+async def list_groups(
+    keitaro: KeitaroClient = Depends(get_keitaro),
+) -> dict:
+    raw = await keitaro.get_groups("campaigns")
+    return {"items": raw}
+
+
 @router.get("/dictionaries/geo", response_model=GeoListResponse)
 async def list_geo() -> GeoListResponse:
     return GeoListResponse(items=get_countries())

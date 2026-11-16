@@ -88,3 +88,33 @@ otherwise the next flow is tried. The Offer Flow has **no filters**, so it is th
 > campaign is `<domain>/<campaign-token>/<alias-or-params>`; the domain, token and alias
 > are all available from the campaign object. This should be confirmed with a manual click
 > test before production use.
+
+## Custom Reports API (analytics) — verified
+
+The report engine is available and used by the analytics module.
+
+- Endpoint: **`POST /report/build`** (no other `/report*` paths exist).
+- Request:
+
+```json
+{
+  "range": { "from": "2026-11-09", "to": "2026-11-16", "timezone": "Europe/Moscow" },
+  "metrics": ["clicks", "campaign_unique_clicks", "conversions", "leads", "sales", "rejected", "cr", "cost", "revenue", "profit", "roi", "epc", "cpa"],
+  "grouping": ["offer_id"],
+  "filters": [{ "name": "campaign_id", "operator": "EQUALS", "expression": "211913" }],
+  "sort": [{ "name": "clicks", "order": "desc" }],
+  "summary": true,
+  "limit": 1000
+}
+```
+
+- Response: `{ "rows": [...], "summary": {...}, "total": N }` (the `summary` row has `null`
+  for the grouping key).
+- Verified metrics: `clicks`, `campaign_unique_clicks`, `conversions`, `leads`, `sales`,
+  `rejected`, `cr`, `cost`, `revenue`, `profit`, `roi`, `epc`, `cpa`.
+- Verified grouping dimensions: `campaign_id`, `stream_id`, `offer_id`, `country`, `day`
+  (`day` returns `YYYY-MM-DD` rows for time series; `datetime` returns raw event rows).
+- Verified filters: array of `{ "name": <column>, "operator": "EQUALS", "expression": "<value>" }`.
+- `unique_clicks` is NOT a metric name; the correct key is `campaign_unique_clicks`.
+- The metrics/grouping set is limited to the tracker edition; AdRobot only relies on the
+  verified list above.

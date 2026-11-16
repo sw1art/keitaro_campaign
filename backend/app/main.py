@@ -14,6 +14,7 @@ from app.config import Settings, get_settings
 from app.infrastructure.keitaro import KeitaroClient
 from app.infrastructure.messaging.publisher import RabbitPublisher
 from app.presentation.api import (
+    analytics,
     audit,
     campaigns,
     dashboard,
@@ -87,6 +88,7 @@ def create_app() -> FastAPI:
     api.include_router(operations.router)
     api.include_router(dashboard.router)
     api.include_router(audit.router)
+    api.include_router(analytics.router)
     app.include_router(api)
 
     register_exception_handlers(app)

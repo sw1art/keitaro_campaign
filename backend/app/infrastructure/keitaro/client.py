@@ -218,3 +218,8 @@ class KeitaroClient:
 
     async def get_stream_types(self) -> list[dict[str, Any]]:
         return self._as_list(await self._request("GET", "/stream_types", retry=True))
+
+    # --- custom reports ---
+    async def build_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        data = await self._request("POST", "/report/build", json=payload, retry=False)
+        return data if isinstance(data, dict) else {}

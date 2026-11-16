@@ -41,6 +41,9 @@ EVENT_TYPE_CREATE = "campaign.create"
 async def list_campaigns(
     search: str | None = Query(default=None),
     state: str | None = Query(default=None),
+    domain_id: int | None = Query(default=None),
+    traffic_source_id: int | None = Query(default=None),
+    group_id: int | None = Query(default=None),
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc"),
     page: int = Query(default=1, ge=1),
@@ -48,20 +51,42 @@ async def list_campaigns(
     keitaro: KeitaroClient = Depends(get_keitaro),
 ) -> CampaignListResponse:
     raw = await keitaro.get_campaigns(query=search or None, state=state or None)
-    # Client-side state filter in case the Keitaro endpoint ignores `state`.
+    # Client-side filters (Keitaro /campaigns only supports query/state).
     if state:
         raw = [c for c in raw if c.get("state") == state]
+    if domain_id is not None:
+        raw = [c for c in raw if c.get("domain_id") == domain_id]
+    if traffic_source_id is not None:
+        raw = [c for c in raw if c.get("traffic_source_id") == traffic_source_id]
+    if group_id is not None:
+        raw = [c for c in raw if c.get("group_id") == group_id]
 
-    sortable = {"id", "name", "state", "created_at", "updated_at"}
+    ts_names = await resolve_traffic_source_names(keitaro)
+
+    sortable = {
+        "id",
+        "name",
+        "state",
+        "created_at",
+        "updated_at",
+        "domain",
+        "group",
+        "traffic_source",
+    }
     key = sort_by if sort_by in sortable else "created_at"
     reverse = sort_order.lower() != "asc"
-    raw.sort(key=lambda c: c.get(key) or "", reverse=reverse)
+
+    def sort_key(c: dict) -> str:
+        if key == "traffic_source":
+            return ts_names.get(c.get("traffic_source_id"), "")
+        return c.get(key) or ""
+
+    raw.sort(key=sort_key, reverse=reverse)
 
     total = len(raw)
     start = (page - 1) * page_size
     page_items = raw[start : start + page_size]
 
-    ts_names = await resolve_traffic_source_names(keitaro)
     items = [map_campaign(c, ts_names.get(c.get("traffic_source_id"))) for c in page_items]
     return CampaignListResponse(items=items, total=total, page=page, page_size=page_size)
 

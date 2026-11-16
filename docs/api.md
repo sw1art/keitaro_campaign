@@ -295,6 +295,44 @@ Query: `search` (matches name or id), `state` (default `active`), `page`, `page_
 
 ---
 
+## Analytics (Keitaro Custom Reports)
+
+All analytics endpoints accept: `range` (`today`|`yesterday`|`last_7_days`|`last_30_days`|`custom`, default `last_7_days`), optional `from`/`to` (for `custom`), `timezone` (default `Europe/Moscow`).
+
+Metrics: `clicks`, `campaign_unique_clicks`, `conversions`, `leads`, `sales`, `rejected`, `cr`, `cost`, `revenue`, `profit`, `roi`, `epc`, `cpa`.
+
+### `GET /analytics/overview`
+
+```json
+{
+  "range": { "from": "...", "to": "...", "prev_from": "...", "prev_to": "...", "timezone": "Europe/Moscow" },
+  "metrics": { "clicks": 29, "campaign_unique_clicks": 11, "conversions": 0, "...": 0 },
+  "deltas": { "clicks": 100.0, "conversions": null, "...": null }
+}
+```
+
+### `GET /analytics/trends`
+
+`{ "range": {...}, "items": [ { "day": "2026-11-16", "clicks": 19, "conversions": 0, "revenue": 0, "cost": 0, "profit": 0, "roi": 0, "cr": 0 } ] }`
+
+### `GET /analytics/campaigns/{id}`
+
+`{ "range": {...}, "campaign_id": 211913, "metrics": {...}, "streams": [...], "offers": [...], "geo": [...] }`
+
+### `GET /analytics/offers?campaign_id=&range=...`
+
+`{ "range": {...}, "campaign_id": null, "items": [ { "offer_id": 10184, "offer_name": "...", "offer_state": "active", "clicks": 13, "...": 0, "planned_share": 50.0, "actual_share": 100.0 } ] }`
+
+`planned_share` / `actual_share` are present only when `campaign_id` is provided (planned = offer `share` in the Offer Flow, actual = share of clicks).
+
+### `GET /analytics/geo?campaign_id=&range=...`
+
+`{ "range": {...}, "items": [ { "country": "Netherlands", "clicks": 13, "conversions": 0, "cr": 0, "revenue": 0, "cost": 0, "profit": 0, "roi": 0, "epc": 0, "cpa": 0 } ] }`
+
+### `GET /analytics/export?type=&campaign_id=&range=&from=&to=`
+
+Downloads a CSV (`type`: `campaigns`|`offers`|`geo`|`streams`).
+
 ## System
 
 - `GET /healthz` (and `GET /health/live`) — liveness (no dependency checks).
