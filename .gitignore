@@ -44,3 +44,6 @@ pnpm-debug.log*
 
 # Docker
 *.pid
+
+# DLS
+Task.md
