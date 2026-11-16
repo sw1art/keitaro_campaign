@@ -61,6 +61,10 @@ export const useCampaignEditorStore = defineStore('campaignEditor', () => {
     workingOffers.value = originalOffers.value.map((offer) => ({ ...offer }))
   }
 
+  function resetShares() {
+    workingOffers.value = workingOffers.value.map((offer) => ({ ...offer, share: 100 }))
+  }
+
   return {
     streamId,
     originalOffers,
@@ -78,5 +82,6 @@ export const useCampaignEditorStore = defineStore('campaignEditor', () => {
     removeOffer,
     setShare,
     reset,
+    resetShares,
   }
 })

@@ -22,34 +22,81 @@ const isActive = computed(() => {
 })
 
 const stageLabel = computed(() => {
-  switch (operation.value?.status) {
+  switch (operation.value?.current_stage) {
     case 'pending':
       return 'В очереди'
-    case 'processing':
-      return 'Выполняется'
+    case 'creating_campaign':
+      return 'Создание кампании'
+    case 'creating_google_stream':
+      return 'Создание Google Redirect'
+    case 'creating_offer_stream':
+      return 'Создание Offer Flow'
+    case 'verifying':
+      return 'Проверка результата'
     case 'completed':
       return 'Завершено'
-    case 'failed':
-      return 'Ошибка'
     default:
       return '—'
   }
 })
 
-const stageIndex = computed(() => {
-  switch (operation.value?.status) {
-    case 'pending':
-      return 0
-    case 'processing':
-      return 1
-    case 'completed':
-      return 2
-    default:
-      return 0
-  }
+const clampedProgress = computed(() => {
+  const progress = operation.value?.progress ?? 0
+  return Math.min(100, Math.max(0, progress))
 })
 
-const steps = ['В очереди', 'Выполняется', 'Завершено']
+const steps = ['Создание кампании', 'Google Redirect', 'Offer Flow', 'Проверка результата']
+
+type StepState = 'pending' | 'current' | 'done' | 'failed'
+
+function stageInfo(stage: string | null | undefined): { completedCount: number; currentIndex: number } {
+  switch (stage) {
+    case 'pending':
+      return { completedCount: 0, currentIndex: -1 }
+    case 'creating_campaign':
+      return { completedCount: 0, currentIndex: 0 }
+    case 'creating_google_stream':
+      return { completedCount: 1, currentIndex: 1 }
+    case 'creating_offer_stream':
+      return { completedCount: 2, currentIndex: 2 }
+    case 'verifying':
+      return { completedCount: 3, currentIndex: 3 }
+    case 'completed':
+      return { completedCount: 4, currentIndex: -1 }
+    default:
+      return { completedCount: 0, currentIndex: -1 }
+  }
+}
+
+const stepStates = computed<StepState[]>(() => {
+  const status = operation.value?.status
+  const stage = operation.value?.current_stage
+  const info = stageInfo(stage)
+  const isTerminalFailure =
+    status === 'failed' || status === 'partially_failed' || status === 'needs_attention'
+  return steps.map((_, index) => {
+    if (index < info.completedCount) return 'done'
+    if (index === info.currentIndex) {
+      if (isTerminalFailure) return 'failed'
+      if (status === 'processing') return 'current'
+      return 'pending'
+    }
+    return 'pending'
+  })
+})
+
+function stepCircleClass(state: StepState): string {
+  switch (state) {
+    case 'done':
+      return 'border-emerald-500 bg-emerald-500 text-white'
+    case 'failed':
+      return 'border-red-500 bg-red-500 text-white'
+    case 'current':
+      return 'border-indigo-500 bg-indigo-50 text-indigo-600'
+    default:
+      return 'border-slate-300 bg-white text-slate-400'
+  }
+}
 
 function startPolling() {
   if (timer) return
@@ -128,28 +175,60 @@ onBeforeUnmount(stopPolling)
             <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Создана</dt>
             <dd class="mt-1 text-sm text-slate-800">{{ formatDate(operation.created_at) }}</dd>
           </div>
+          <div v-if="operation.started_at">
+            <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Начата</dt>
+            <dd class="mt-1 text-sm text-slate-800">{{ formatDate(operation.started_at) }}</dd>
+          </div>
+          <div v-if="operation.finished_at">
+            <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Завершена</dt>
+            <dd class="mt-1 text-sm text-slate-800">{{ formatDate(operation.finished_at) }}</dd>
+          </div>
         </dl>
       </div>
 
       <div class="card p-6">
-        <ol class="flex items-center">
-          <li v-for="(step, index) in steps" :key="step" class="flex flex-1 items-center">
-            <div class="flex flex-col items-center">
+        <div>
+          <div class="flex items-center justify-between text-sm text-slate-500">
+            <span>Прогресс</span>
+            <span class="font-medium text-slate-800">{{ clampedProgress }}%</span>
+          </div>
+          <div class="mt-1.5 h-2 w-full rounded-full bg-slate-200">
+            <div
+              class="h-2 rounded-full bg-indigo-600 transition-all duration-500"
+              :style="{ width: `${clampedProgress}%` }"
+            ></div>
+          </div>
+        </div>
+
+        <ol class="mt-6 flex items-start">
+          <li v-for="(step, index) in steps" :key="step" class="flex flex-1 items-start">
+            <div class="flex flex-col items-center text-center">
               <span
-                class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold"
-                :class="index < stageIndex || operation.status === 'completed' ? 'bg-emerald-500 text-white' : index === stageIndex ? 'bg-indigo-500 text-white' : 'bg-slate-200 text-slate-500'"
+                class="flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-semibold"
+                :class="stepCircleClass(stepStates[index])"
               >
-                {{ index + 1 }}
+                <svg
+                  v-if="stepStates[index] === 'current'"
+                  class="h-4 w-4 animate-spin"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+                <span v-else-if="stepStates[index] === 'done'">✓</span>
+                <span v-else-if="stepStates[index] === 'failed'">✕</span>
+                <span v-else>○</span>
               </span>
-              <span class="mt-1.5 text-xs text-slate-600">{{ step }}</span>
+              <span class="mt-2 max-w-[7rem] text-xs leading-tight text-slate-600">{{ step }}</span>
             </div>
-            <div v-if="index < steps.length - 1" class="mx-2 h-0.5 flex-1 bg-slate-200"></div>
+            <div v-if="index < steps.length - 1" class="mx-1 mt-4 h-0.5 flex-1 bg-slate-200"></div>
           </li>
         </ol>
 
-        <div v-if="operation.status === 'failed' && operation.error" class="mt-5">
-          <AppAlert type="error" title="Ошибка операции">
-            <span class="font-mono">{{ operation.error.code }}</span> — {{ operation.error.message }}
+        <div v-if="operation.status === 'failed'" class="mt-6">
+          <AppAlert v-if="operation.error" type="error" title="Ошибка операции">
+            <span class="font-mono">{{ operation.error?.code }}</span> — {{ operation.error?.message }}
           </AppAlert>
           <div class="mt-3">
             <button class="btn btn-primary" :disabled="retrying" @click="retry">
@@ -159,12 +238,27 @@ onBeforeUnmount(stopPolling)
           </div>
         </div>
 
-        <div v-if="operation.status === 'completed' && operation.campaign_id" class="mt-5 flex items-center gap-3">
+        <div v-else-if="operation.status === 'partially_failed'" class="mt-6">
+          <AppAlert type="warning" title="Частично завершено">
+            Частично завершено — часть объектов создана.
+            <span v-if="operation.campaign_id"> Создана кампания #{{ operation.campaign_id }}.</span>
+            <span v-if="operation.error"> {{ operation.error?.code }} — {{ operation.error?.message }}</span>
+          </AppAlert>
+        </div>
+
+        <div v-else-if="operation.status === 'needs_attention'" class="mt-6">
+          <AppAlert type="warning" title="Требуется вмешательство">
+            Операция требует вмешательства.
+            <span v-if="operation.error"> {{ operation.error?.code }} — {{ operation.error?.message }}</span>
+          </AppAlert>
+        </div>
+
+        <div v-if="operation.status === 'completed' && operation.campaign_id" class="mt-6 flex flex-wrap items-center gap-3">
           <AppAlert type="success" title="Кампания создана">Кампания #{{ operation.campaign_id }} успешно создана</AppAlert>
           <NuxtLink :to="`/campaigns/${operation.campaign_id}`" class="btn btn-primary shrink-0">Открыть кампанию</NuxtLink>
         </div>
 
-        <div v-if="isActive" class="mt-5 flex items-center gap-2 text-sm text-slate-500">
+        <div v-if="isActive" class="mt-6 flex items-center gap-2 text-sm text-slate-500">
           <AppSpinner size="sm" label="Операция выполняется, статус обновляется автоматически…" />
         </div>
       </div>

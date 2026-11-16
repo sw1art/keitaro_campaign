@@ -66,12 +66,23 @@ export function createMockApi(): AdRobotApi {
   return {
     async listCampaigns(params) {
       await delay(250)
-      let items = [...campaigns].sort((a, b) => b.created_at.localeCompare(a.created_at))
+      let items = [...campaigns]
       if (params?.search) {
         const query = params.search.toLowerCase()
         items = items.filter((c) => String(c.id).includes(query) || c.name.toLowerCase().includes(query))
       }
       if (params?.state) items = items.filter((c) => c.state === params.state)
+      const sortBy = params?.sort_by ?? 'created_at'
+      const sortOrder = params?.sort_order ?? 'desc'
+      items.sort((a, b) => {
+        const av = (a as unknown as Record<string, unknown>)[sortBy]
+        const bv = (b as unknown as Record<string, unknown>)[sortBy]
+        const result =
+          typeof av === 'number' && typeof bv === 'number'
+            ? av - bv
+            : String(av ?? '').localeCompare(String(bv ?? ''))
+        return sortOrder === 'asc' ? result : -result
+      })
       return paginate(items, params?.page ?? 1, params?.page_size ?? 20)
     },
 
@@ -98,6 +109,10 @@ export function createMockApi(): AdRobotApi {
         status: 'pending',
         campaign_id: null,
         error: null,
+        current_stage: 'pending',
+        progress: 0,
+        started_at: null,
+        finished_at: null,
         created_at: isoDate(new Date()),
         completed_at: null,
       }
@@ -105,7 +120,25 @@ export function createMockApi(): AdRobotApi {
 
       setTimeout(() => {
         operation.status = 'processing'
-      }, 800)
+        operation.current_stage = 'creating_campaign'
+        operation.progress = 15
+        operation.started_at = isoDate(new Date())
+      }, 600)
+
+      setTimeout(() => {
+        operation.current_stage = 'creating_google_stream'
+        operation.progress = 40
+      }, 1200)
+
+      setTimeout(() => {
+        operation.current_stage = 'creating_offer_stream'
+        operation.progress = 65
+      }, 1800)
+
+      setTimeout(() => {
+        operation.current_stage = 'verifying'
+        operation.progress = 90
+      }, 2400)
 
       setTimeout(() => {
         const campaignId = nextCampaignId++
@@ -133,14 +166,18 @@ export function createMockApi(): AdRobotApi {
         nextStreamId = result.nextStreamId
         streamsByCampaign.set(campaign.id, result.streams)
         operation.status = 'completed'
+        operation.current_stage = 'completed'
+        operation.progress = 100
         operation.campaign_id = campaignId
+        operation.finished_at = isoDate(new Date())
         operation.completed_at = isoDate(new Date())
-      }, 2200)
+      }, 3000)
 
       const response: CreateCampaignResponse = {
         operation_id: operationId,
         status: 'pending',
         message: 'Campaign creation started',
+        warnings: [],
       }
       return response
     },
@@ -187,6 +224,10 @@ export function createMockApi(): AdRobotApi {
       }
       operation.status = 'pending'
       operation.error = null
+      operation.current_stage = 'pending'
+      operation.progress = 0
+      operation.started_at = null
+      operation.finished_at = null
       operation.completed_at = null
       return clone(operation)
     },

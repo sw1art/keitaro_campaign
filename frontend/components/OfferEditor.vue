@@ -64,18 +64,24 @@ function cancelRemove() {
 
 <template>
   <div class="space-y-4">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div class="flex items-center gap-2">
-        <h3 class="text-base font-semibold text-slate-900">Офферы</h3>
-        <span
-          v-if="store.isDirty"
-          class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700"
-        >
-          <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-          Есть несохранённые изменения
-        </span>
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div>
+        <div class="flex items-center gap-2">
+          <h3 class="text-base font-semibold text-slate-900">Офферы</h3>
+          <span
+            v-if="store.isDirty"
+            class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700"
+          >
+            <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+            Есть несохранённые изменения
+          </span>
+        </div>
+        <p class="mt-1 text-sm text-slate-500">
+          Офферов: {{ store.workingOffers.length }} · Сумма весов: {{ store.totalShare }}
+        </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
+        <button class="btn btn-secondary" :disabled="!store.isDirty" @click="store.resetShares()">Сбросить веса (100)</button>
         <button class="btn btn-secondary" @click="emit('add-offer')">Добавить оффер</button>
         <button class="btn btn-secondary" :disabled="!store.isDirty" @click="emit('cancel')">Отменить изменения</button>
         <button class="btn btn-primary" :disabled="!store.canSave" @click="emit('save')">Сохранить изменения</button>
@@ -103,7 +109,10 @@ function cancelRemove() {
         <tbody class="divide-y divide-slate-100 bg-white">
           <tr v-for="offer in store.workingOffers" :key="offer.offer_id">
             <td class="px-4 py-3">
-              <div class="font-medium text-slate-900">{{ offerName(offer.offer_id) }}</div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-medium text-slate-900">{{ offerName(offer.offer_id) }}</span>
+                <AppStatusBadge v-if="offersById[offer.offer_id]" :status="offersById[offer.offer_id].state" />
+              </div>
               <div v-if="offersById[offer.offer_id]?.group" class="text-xs text-slate-500">
                 {{ offersById[offer.offer_id].group }}
               </div>
@@ -142,6 +151,9 @@ function cancelRemove() {
         Оффер «{{ pendingRemoveId !== null ? offerName(pendingRemoveId) : '' }}» будет удалён из потока Offer Flow.
         Это действие не удаляет оффер из Keitaro.
       </p>
+      <AppAlert v-if="store.workingOffers.length === 1" type="warning" class="mt-3">
+        Это последний оффер — поток останется пустым.
+      </AppAlert>
       <template #footer>
         <button class="btn btn-secondary" @click="cancelRemove">Отмена</button>
         <button class="btn btn-danger" @click="doRemove">Удалить</button>

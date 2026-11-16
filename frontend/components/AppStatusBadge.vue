@@ -34,6 +34,10 @@ const style = computed<BadgeStyle>(() => {
       return { classes: 'bg-red-50 text-red-700 ring-red-600/20', dot: 'bg-red-500', text: 'Ошибка' }
     case 'deleted':
       return { classes: 'bg-slate-100 text-slate-500 ring-slate-500/20', dot: 'bg-slate-400', text: 'Удалена' }
+    case 'partially_failed':
+      return { classes: 'bg-amber-50 text-amber-700 ring-amber-600/20', dot: 'bg-amber-500', text: 'Частично завершено' }
+    case 'needs_attention':
+      return { classes: 'bg-orange-50 text-orange-700 ring-orange-600/20', dot: 'bg-orange-500', text: 'Требуется вмешательство' }
     default:
       return { classes: 'bg-slate-100 text-slate-600 ring-slate-500/20', dot: 'bg-slate-400', text: props.label ?? props.status }
   }

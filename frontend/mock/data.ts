@@ -1,4 +1,4 @@
-import type { Campaign, Domain, GeoCountry, Offer, Operation, Stream, TrafficSource } from '~/types'
+import type { Campaign, Domain, GeoCountry, Offer, Operation, OperationStage, Stream, TrafficSource } from '~/types'
 
 function pad(value: number): string {
   return String(value).padStart(2, '0')
@@ -193,6 +193,25 @@ export function makeStreams(
   return { streams: [googleRedirect, offerFlow], nextStreamId: startStreamId + 2 }
 }
 
+function stageProgress(stage: OperationStage): number {
+  switch (stage) {
+    case 'pending':
+      return 0
+    case 'creating_campaign':
+      return 15
+    case 'creating_google_stream':
+      return 40
+    case 'creating_offer_stream':
+      return 65
+    case 'verifying':
+      return 90
+    case 'completed':
+      return 100
+    default:
+      return 0
+  }
+}
+
 export function makeOperations(): Operation[] {
   const completed = (operationId: string, campaignId: number, minutes: number): Operation => ({
     operation_id: operationId,
@@ -200,26 +219,40 @@ export function makeOperations(): Operation[] {
     status: 'completed',
     campaign_id: campaignId,
     error: null,
+    current_stage: 'completed',
+    progress: 100,
+    started_at: isoDate(minutesAgo(minutes - 1)),
+    finished_at: isoDate(minutesAgo(minutes - 2)),
     created_at: isoDate(minutesAgo(minutes)),
-    completed_at: isoDate(minutesAgo(minutes - 1)),
+    completed_at: isoDate(minutesAgo(minutes - 2)),
   })
 
-  const failed = (operationId: string, code: string, message: string, minutes: number): Operation => ({
+  const failed = (
+    operationId: string,
+    code: string,
+    message: string,
+    minutes: number,
+    stage: OperationStage,
+  ): Operation => ({
     operation_id: operationId,
     type: 'campaign.create',
     status: 'failed',
     campaign_id: null,
     error: { code, message },
+    current_stage: stage,
+    progress: stageProgress(stage),
+    started_at: isoDate(minutesAgo(minutes - 1)),
+    finished_at: isoDate(minutesAgo(minutes - 2)),
     created_at: isoDate(minutesAgo(minutes)),
-    completed_at: isoDate(minutesAgo(minutes - 1)),
+    completed_at: isoDate(minutesAgo(minutes - 2)),
   })
 
   return [
     completed('op-seed-1', 212150, 12),
-    failed('op-seed-2', 'KEITARO_STREAM_CREATION_FAILED', 'Failed to create Offer Flow', 30),
+    failed('op-seed-2', 'KEITARO_STREAM_CREATION_FAILED', 'Failed to create Offer Flow', 30, 'creating_offer_stream'),
     completed('op-seed-3', 212151, 45),
     completed('op-seed-4', 212152, 120),
-    failed('op-seed-5', 'KEITARO_CAMPAIGN_CREATION_FAILED', 'Keitaro API unavailable', 200),
+    failed('op-seed-5', 'KEITARO_CAMPAIGN_CREATION_FAILED', 'Keitaro API unavailable', 200, 'creating_campaign'),
     completed('op-seed-6', 212153, 300),
   ]
 }

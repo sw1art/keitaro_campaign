@@ -29,4 +29,5 @@ export interface CreateCampaignResponse {
   operation_id: string
   status: OperationStatus
   message: string
+  warnings?: string[]
 }

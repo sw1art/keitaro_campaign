@@ -13,6 +13,8 @@ export interface ListParams {
 export interface CampaignListParams extends ListParams {
   search?: string
   state?: string
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
 }
 
 export interface OfferListParams extends ListParams {
