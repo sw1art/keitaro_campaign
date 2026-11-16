@@ -1,4 +1,5 @@
 """Domain entities (plain dataclasses, persistence-agnostic)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

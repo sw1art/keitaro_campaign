@@ -1,12 +1,10 @@
 """Campaigns API router."""
+
 from __future__ import annotations
 
-import asyncio
-import logging
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.dto import CreateCampaignCommand
 from app.application.services.campaign_service import CampaignCreationService
@@ -14,9 +12,10 @@ from app.config import get_settings
 from app.domain.entities import Operation, OutboxEvent
 from app.infrastructure.geo import get_valid_geo_codes
 from app.infrastructure.keitaro import KeitaroClient
-from app.infrastructure.messaging.outbox import build_event_message, publish_pending
+from app.infrastructure.messaging.outbox import build_event_message
 from app.infrastructure.messaging.publisher import RabbitPublisher
 from app.infrastructure.repositories import Repositories
+from app.presentation.api.common import resolve_traffic_source_names, schedule_best_effort_publish
 from app.presentation.api.mappers import map_campaign, map_operation, map_stream
 from app.presentation.dependencies import (
     get_keitaro,
@@ -33,25 +32,9 @@ from app.presentation.schemas import (
     StreamListResponse,
 )
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
 EVENT_TYPE_CREATE = "campaign.create"
-
-
-async def _resolve_traffic_source_names(keitaro: KeitaroClient) -> dict[int, str]:
-    try:
-        sources = await keitaro.get_traffic_sources()
-        return {s["id"]: s.get("name") or str(s["id"]) for s in sources}
-    except Exception:  # noqa: BLE001 - name resolution is non-critical
-        return {}
-
-
-async def _publish_best_effort(session_factory, publisher: RabbitPublisher) -> None:
-    try:
-        await publish_pending(session_factory, publisher, limit=20)
-    except Exception:  # noqa: BLE001
-        logger.exception("Background outbox publish failed")
 
 
 @router.get("", response_model=CampaignListResponse)
@@ -70,10 +53,8 @@ async def list_campaigns(
     start = (page - 1) * page_size
     page_items = raw[start : start + page_size]
 
-    ts_names = await _resolve_traffic_source_names(keitaro)
-    items = [
-        map_campaign(c, ts_names.get(c.get("traffic_source_id"))) for c in page_items
-    ]
+    ts_names = await resolve_traffic_source_names(keitaro)
+    items = [map_campaign(c, ts_names.get(c.get("traffic_source_id"))) for c in page_items]
     return CampaignListResponse(items=items, total=total, page=page, page_size=page_size)
 
 
@@ -124,7 +105,7 @@ async def create_campaign(
     await repos.session.commit()
 
     # Best-effort immediate publish; the worker's outbox poller is the fallback.
-    asyncio.create_task(_publish_best_effort(get_session_factory(), publisher))
+    schedule_best_effort_publish(get_session_factory(), publisher)
 
     return CreateCampaignAccepted(
         operation_id=str(operation.id),
@@ -139,7 +120,7 @@ async def get_campaign(
     keitaro: KeitaroClient = Depends(get_keitaro),
 ) -> CampaignItem:
     raw = await keitaro.get_campaign(campaign_id)
-    ts_names = await _resolve_traffic_source_names(keitaro)
+    ts_names = await resolve_traffic_source_names(keitaro)
     return map_campaign(raw, ts_names.get(raw.get("traffic_source_id")))
 
 

@@ -1,4 +1,5 @@
 """Worker: campaign.create message handler (idempotent)."""
+
 from __future__ import annotations
 
 import logging
@@ -69,7 +70,9 @@ class CampaignCreateHandler:
             except RetryableError as exc:
                 operation = await repos.operations.get(operation_id)
                 if operation is not None and operation.attempts >= topology.MAX_ATTEMPTS:
-                    await self._fail(repos.operations, operation, exc, code="KEITARO_OPERATION_FAILED")
+                    await self._fail(
+                        repos.operations, operation, exc, code="KEITARO_OPERATION_FAILED"
+                    )
                     await session.commit()
                     return DEAD_LETTER
                 if operation is not None:
@@ -86,7 +89,9 @@ class CampaignCreateHandler:
             except PermanentError as exc:
                 operation = await repos.operations.get(operation_id)
                 if operation is not None:
-                    await self._fail(repos.operations, operation, exc, code="KEITARO_OPERATION_FAILED")
+                    await self._fail(
+                        repos.operations, operation, exc, code="KEITARO_OPERATION_FAILED"
+                    )
                     await session.commit()
                 return DEAD_LETTER
             except Exception as exc:  # noqa: BLE001 - last resort

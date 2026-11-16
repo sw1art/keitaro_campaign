@@ -1,4 +1,5 @@
 """Streams API router (editor)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
@@ -33,6 +34,7 @@ async def update_stream_offers(
         UpdateOffersCommand(
             stream_id=stream_id,
             offers=[{"offer_id": o.offer_id, "share": o.share} for o in body.offers],
+            base_fingerprint=body.base_fingerprint,
         )
     )
     return map_stream(updated)

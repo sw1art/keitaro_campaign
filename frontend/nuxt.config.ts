@@ -14,6 +14,9 @@ export default defineNuxtConfig({
       // Base URL of the AdRobot backend API (no trailing slash).
       // Override at build/dev time with NUXT_PUBLIC_API_BASE.
       apiBase: 'http://localhost:8000/api/v1',
+      // Optional shared API token sent as `X-Api-Key`. Set NUXT_PUBLIC_API_TOKEN
+      // to match the backend ADROBOT_API_TOKEN. (For internal deployments.)
+      apiToken: '',
       // Enable the in-browser mock when the backend is not running.
       // Set NUXT_PUBLIC_MOCK=true to enable.
       mock: false,

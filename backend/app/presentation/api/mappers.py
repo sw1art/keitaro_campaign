@@ -1,16 +1,27 @@
 """Mapping helpers: Keitaro raw dicts -> API schemas."""
+
 from __future__ import annotations
 
 from typing import Any
 
-from app.domain.entities import Operation
-from app.presentation.schemas import CampaignItem, OfferItem, OperationItem, StreamItem
+from app.domain import value_objects
+from app.domain.entities import AuditLogEntry, Operation
+from app.presentation.schemas import (
+    AuditLogItem,
+    CampaignItem,
+    OfferItem,
+    OperationItem,
+    StreamItem,
+)
 
 
 def map_operation(op: Operation) -> OperationItem:
     error = None
     if op.error:
-        error = {"code": op.error.get("code", "OPERATION_FAILED"), "message": op.error.get("message", "")}
+        error = {
+            "code": op.error.get("code", "OPERATION_FAILED"),
+            "message": op.error.get("message", ""),
+        }
     return OperationItem(
         operation_id=str(op.id),
         type=op.type,
@@ -19,6 +30,18 @@ def map_operation(op: Operation) -> OperationItem:
         error=error,
         created_at=op.created_at,
         completed_at=op.completed_at,
+    )
+
+
+def map_audit_log(entry: AuditLogEntry) -> AuditLogItem:
+    return AuditLogItem(
+        id=str(entry.id),
+        operation_id=str(entry.operation_id) if entry.operation_id else None,
+        action=entry.action,
+        entity_type=entry.entity_type,
+        entity_id=entry.entity_id,
+        details=entry.details,
+        created_at=entry.created_at,
     )
 
 
@@ -59,6 +82,14 @@ def map_offer(raw: dict[str, Any]) -> OfferItem:
 
 
 def map_stream(raw: dict[str, Any]) -> StreamItem:
+    offers = [
+        {
+            "offer_id": o.get("offer_id"),
+            "state": o.get("state"),
+            "share": o.get("share") if o.get("share") is not None else 0,
+        }
+        for o in (raw.get("offers") or [])
+    ]
     return StreamItem(
         id=raw.get("id"),
         type=raw.get("type"),
@@ -81,13 +112,9 @@ def map_stream(raw: dict[str, Any]) -> StreamItem:
             }
             for f in (raw.get("filters") or [])
         ],
-        offers=[
-            {
-                "offer_id": o.get("offer_id"),
-                "state": o.get("state"),
-                "share": o.get("share") if o.get("share") is not None else 0,
-            }
-            for o in (raw.get("offers") or [])
-        ],
+        offers=offers,
         landings=raw.get("landings") or [],
+        fingerprint=value_objects.offers_fingerprint(
+            [{"offer_id": o["offer_id"], "share": o["share"]} for o in offers]
+        ),
     )

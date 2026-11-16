@@ -1,4 +1,5 @@
 """Application DTOs (commands / results)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -17,3 +18,4 @@ class CreateCampaignCommand:
 class UpdateOffersCommand:
     stream_id: int
     offers: list[dict[str, Any]] = field(default_factory=list)
+    base_fingerprint: str | None = None

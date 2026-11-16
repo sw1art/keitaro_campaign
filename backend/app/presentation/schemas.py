@@ -1,4 +1,5 @@
 """Request/response Pydantic schemas for the AdRobot API."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -152,6 +153,8 @@ class StreamItem(BaseModel):
     filters: list[StreamFilter] = Field(default_factory=list)
     offers: list[StreamOffer] = Field(default_factory=list)
     landings: list[Any] = Field(default_factory=list)
+    # Fingerprint of the current offers (for optimistic concurrency).
+    fingerprint: str | None = None
 
 
 class StreamListResponse(BaseModel):
@@ -165,6 +168,9 @@ class OfferShare(BaseModel):
 
 class UpdateOffersRequest(BaseModel):
     offers: list[OfferShare] = Field(min_length=1)
+    # Fingerprint of the offers state the client based its edit on (optimistic
+    # concurrency). Optional for backward compatibility.
+    base_fingerprint: str | None = None
 
 
 # ---------------------------------------------------------------- operations
@@ -198,3 +204,31 @@ class CreateCampaignAccepted(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: ErrorDetail
+
+
+# ---------------------------------------------------------------- audit log
+class AuditLogItem(BaseModel):
+    id: str
+    operation_id: str | None = None
+    action: str
+    entity_type: str
+    entity_id: str
+    details: dict | None = None
+    created_at: datetime | None = None
+
+
+class AuditLogListResponse(BaseModel):
+    items: list[AuditLogItem]
+    total: int
+    page: int
+    page_size: int
+
+
+# ---------------------------------------------------------------- dashboard
+class DashboardResponse(BaseModel):
+    campaigns_count: int
+    recent_campaigns: list[CampaignItem]
+    operations_total: int
+    operations_completed: int
+    operations_failed: int
+    recent_operations: list[OperationItem]

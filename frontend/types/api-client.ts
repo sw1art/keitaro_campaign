@@ -1,5 +1,7 @@
 import type { CampaignListParams, ListResponse, OfferListParams, OperationListParams } from './api'
+import type { AuditLogItem } from './audit'
 import type { Campaign, CreateCampaignRequest, CreateCampaignResponse } from './campaign'
+import type { Dashboard } from './dashboard'
 import type { Domain } from './domain'
 import type { GeoCountry } from './geo'
 import type { Offer } from './offer'
@@ -20,6 +22,9 @@ export interface AdRobotApi {
   updateStreamOffers(id: number, body: UpdateStreamOffersRequest): Promise<Stream>
   listOperations(params?: OperationListParams): Promise<ListResponse<Operation>>
   getOperation(id: string): Promise<Operation>
+  retryOperation(id: string): Promise<Operation>
+  getOperationAudit(id: string): Promise<AuditLogItem[]>
+  getDashboard(): Promise<Dashboard>
   listGeo(): Promise<GeoCountry[]>
   listOffers(params?: OfferListParams): Promise<ListResponse<Offer>>
   listDomains(): Promise<Domain[]>

@@ -80,7 +80,15 @@ async function load() {
     offerFlow.value = flow ? await api.getStream(flow.id) : null
 
     await loadOfferDetails(offerFlow.value)
-    editor.initialize(offerFlow.value ?? { id: 0, offers: [] })
+    editor.initialize(
+      offerFlow.value
+        ? {
+            id: offerFlow.value.id,
+            offers: offerFlow.value.offers.map((o) => ({ offer_id: o.offer_id, share: o.share })),
+            fingerprint: offerFlow.value.fingerprint,
+          }
+        : { id: 0, offers: [] },
+    )
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Не удалось загрузить кампанию'
   } finally {
@@ -111,13 +119,22 @@ async function onSave() {
   try {
     const updated = await api.updateStreamOffers(offerFlow.value.id, {
       offers: editor.workingOffers.map((offer) => ({ offer_id: offer.offer_id, share: offer.share })),
+      base_fingerprint: editor.baseFingerprint ?? undefined,
     })
     offerFlow.value = updated
-    editor.applyServer(updated.offers.map((offer) => ({ offer_id: offer.offer_id, share: offer.share })))
+    editor.applyServer(
+      updated.offers.map((offer) => ({ offer_id: offer.offer_id, share: offer.share })),
+      updated.fingerprint,
+    )
     await loadOfferDetails(updated)
     toasts.push('success', 'Изменения сохранены')
   } catch (err) {
-    toasts.push('error', err instanceof ApiError ? err.message : 'Не удалось сохранить изменения')
+    if (err instanceof ApiError && err.status === 409) {
+      toasts.push('error', 'Поток был изменён другим пользователем. Данные перезагружены — проверьте и сохраните снова.')
+      await load()
+    } else {
+      toasts.push('error', err instanceof ApiError ? err.message : 'Не удалось сохранить изменения')
+    }
   } finally {
     saving.value = false
   }

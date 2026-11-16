@@ -1,4 +1,5 @@
 """RabbitMQ publisher (implements MessagePublisherProtocol)."""
+
 from __future__ import annotations
 
 import json

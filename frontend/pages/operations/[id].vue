@@ -12,6 +12,7 @@ const operationId = computed(() => String(route.params.id))
 const operation = ref<Operation | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
+const retrying = ref(false)
 
 let timer: ReturnType<typeof setInterval> | undefined
 
@@ -78,6 +79,19 @@ async function load() {
   }
 }
 
+async function retry() {
+  retrying.value = true
+  try {
+    operation.value = await api.retryOperation(operationId.value)
+    error.value = null
+    startPolling()
+  } catch (err) {
+    error.value = err instanceof ApiError ? err.message : 'Не удалось повторить операцию'
+  } finally {
+    retrying.value = false
+  }
+}
+
 onMounted(load)
 onBeforeUnmount(stopPolling)
 </script>
@@ -137,6 +151,12 @@ onBeforeUnmount(stopPolling)
           <AppAlert type="error" title="Ошибка операции">
             <span class="font-mono">{{ operation.error.code }}</span> — {{ operation.error.message }}
           </AppAlert>
+          <div class="mt-3">
+            <button class="btn btn-primary" :disabled="retrying" @click="retry">
+              <AppSpinner v-if="retrying" size="sm" label="Повтор…" />
+              <span v-else>Повторить операцию</span>
+            </button>
+          </div>
         </div>
 
         <div v-if="operation.status === 'completed' && operation.campaign_id" class="mt-5 flex items-center gap-3">

@@ -1,4 +1,5 @@
 """Application-level errors (cross-layer, framework-agnostic)."""
+
 from __future__ import annotations
 
 

@@ -73,3 +73,29 @@ service commits progress (`keitaro_campaign_id`, `google_stream_id`, `offer_stre
 to `operation.result` after each step, so a redelivered message reuses already-created
 entities instead of creating duplicates. The handler returns `ack` for an operation that
 is already `completed`.
+
+## Security & hardening
+
+- Optional shared-token auth (`ADROBOT_API_TOKEN`) enforced on every `/api/v1` request
+  via `X-Api-Key` / `Authorization: Bearer`; disabled when the token is empty.
+- Per-IP rate limiting (in-memory sliding window, `RATE_LIMIT_PER_MINUTE`).
+- Security headers on every response (nosniff, frame deny, referrer policy, permissions).
+- Secrets live only in `.env`; `check_secrets()` fails fast if `KEITARO_API_TOKEN` is missing.
+- Backend validation of all inputs (GEO, offers, share `1..100`, domain active), independent
+  of the frontend.
+
+## Observability
+
+- Every request gets a `X-Request-ID` correlation id (echoed or generated) and an access
+  log line (method, path, status, duration, correlation id).
+- Errors carry the correlation id in the response body and map to stable machine codes.
+- `GET /healthz` (liveness) and `GET /readyz` (DB/RabbitMQ/Keitaro readiness).
+
+## Optimistic concurrency (stream editing)
+
+`GET /streams/{id}` returns a `fingerprint` of the current offers. The client sends it back
+as `base_fingerprint` on `PUT /streams/{id}/offers`; a mismatch means the stream changed
+since it was loaded and the backend returns `409` instead of overwriting someone else's
+edit. The update itself re-reads the full stream right before the PUT, so other settings
+are never lost.
+

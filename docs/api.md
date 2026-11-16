@@ -5,8 +5,17 @@ Base URL: `http://localhost:8000/api/v1`
 All JSON. Errors use a unified shape:
 
 ```json
-{ "error": { "code": "NOT_FOUND", "message": "..." } }
+{ "error": { "code": "NOT_FOUND", "message": "...", "correlation_id": "..." } }
 ```
+
+## Authentication (optional)
+
+When the backend `ADROBOT_API_TOKEN` is set, every `/api/v1` request must send it as
+`X-Api-Key: <token>` (or `Authorization: Bearer <token>`); otherwise the API returns
+`401`. When the token is empty, auth is disabled. The frontend sends `NUXT_PUBLIC_API_TOKEN`
+as `X-Api-Key` when configured.
+
+Rate limiting (per client IP) is applied by default; exceeding it returns `429`.
 
 Common list response shape:
 
@@ -102,11 +111,15 @@ Same item shape as the list element, without the wrapper.
       "offers": [
         { "offer_id": 10050, "state": "active", "share": 100 }
       ],
-      "landings": []
+      "landings": [],
+      "fingerprint": "sha256-of-sorted-offers"
     }
   ]
 }
 ```
+
+`fingerprint` is a stable hash of the current `(offer_id, share)` pairs, used for
+optimistic concurrency on edits.
 
 ### `GET /campaigns/{id}/status` — creation operation status
 
@@ -125,11 +138,17 @@ Same shape as an element of `GET /campaigns/{id}/streams`.
 Request:
 
 ```json
-{ "offers": [ { "offer_id": 25327, "share": 100 }, { "offer_id": 25328, "share": 50 } ] }
+{
+  "offers": [ { "offer_id": 25327, "share": 100 }, { "offer_id": 25328, "share": 50 } ],
+  "base_fingerprint": "sha256-of-the-state-the-client-loaded"
+}
 ```
 
 - `share` must be an integer in `1..100` (verified against the live Keitaro; values `>100` and fractional values are rejected).
 - `offer_id` must be positive, unique, and reference an active offer.
+- `base_fingerprint` (optional) enables optimistic concurrency: if the stream's current
+  offers fingerprint differs from it, the backend returns `409 CONFLICT` and the client
+  should reload.
 
 Response `200`: the updated stream (same shape as `GET /streams/{id}`).
 
@@ -180,6 +199,43 @@ Statuses: `pending` | `processing` | `completed` | `failed`.
 
 On failure `error` is `{ "code": "KEITARO_STREAM_CREATION_FAILED", "message": "..." }`.
 
+### `POST /operations/{id}/retry` — re-enqueue a failed operation
+
+Resets a `failed` operation to `pending` (keeping its partial result so already-created
+entities are reused) and re-publishes its event. Returns `409` if the operation is not
+`failed`.
+
+### `GET /operations/{id}/audit` — audit trail for an operation
+
+Returns `{ items: [AuditLogItem], total, page, page_size }` (actions ordered oldest first).
+
+### `GET /audit-logs` — global audit trail
+
+Query: `page`, `page_size`. Returns `{ items: [AuditLogItem], total, page, page_size }`.
+
+`AuditLogItem`:
+
+```json
+{ "id": "...", "operation_id": "...", "action": "stream.create", "entity_type": "stream", "entity_id": "1311598", "details": {}, "created_at": "..." }
+```
+
+---
+
+## Dashboard
+
+### `GET /dashboard`
+
+```json
+{
+  "campaigns_count": 203,
+  "recent_campaigns": [ "CampaignItem..." ],
+  "operations_total": 4,
+  "operations_completed": 4,
+  "operations_failed": 0,
+  "recent_operations": [ "OperationItem..." ]
+}
+```
+
 ---
 
 ## Dictionaries
@@ -226,6 +282,8 @@ Query: `search` (matches name or id), `state` (default `active`), `page`, `page_
 
 ---
 
-## Dashboard (composed by frontend)
+## System
 
-Use `GET /campaigns?page_size=5` (sorted by `created_at` desc) for "latest campaigns" and `GET /operations?page_size=5` for "latest operations". Campaigns count = `total` from `GET /campaigns?page_size=1`.
+- `GET /healthz` — liveness (no dependency checks).
+- `GET /readyz` — readiness; checks database, RabbitMQ and Keitaro, returns `200` when all are ok or `503` with per-dependency status.
+

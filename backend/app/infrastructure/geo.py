@@ -1,4 +1,5 @@
 """Country reference data (ISO 3166-1 alpha-2)."""
+
 from __future__ import annotations
 
 import logging

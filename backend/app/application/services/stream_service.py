@@ -1,4 +1,5 @@
 """Stream/offer editing use case."""
+
 from __future__ import annotations
 
 from app.application.dto import UpdateOffersCommand
@@ -6,7 +7,7 @@ from app.application.errors import KeitaroApiError
 from app.application.interfaces import KeitaroClientProtocol
 from app.application.services import campaign_builder
 from app.domain import value_objects
-from app.domain.exceptions import NotFoundError, ValidationError
+from app.domain.exceptions import ConflictError, NotFoundError, ValidationError
 
 
 class StreamService:
@@ -36,6 +37,19 @@ class StreamService:
             if exc.status_code == 404:
                 raise NotFoundError(f"Stream {cmd.stream_id} not found.") from exc
             raise
+
+        # Optimistic concurrency: detect changes made after the client loaded the stream.
+        if cmd.base_fingerprint is not None:
+            current = value_objects.offers_fingerprint(
+                [
+                    {"offer_id": o.get("offer_id"), "share": o.get("share")}
+                    for o in (stream.get("offers") or [])
+                ]
+            )
+            if current != cmd.base_fingerprint:
+                raise ConflictError(
+                    "The stream was modified by someone else. Reload the campaign and retry."
+                )
 
         payload = campaign_builder.build_stream_update_payload(stream)
         payload["offers"] = [

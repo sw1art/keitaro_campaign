@@ -1,4 +1,5 @@
 """Domain exceptions — framework-agnostic."""
+
 from __future__ import annotations
 
 

@@ -10,6 +10,7 @@ The exact field names and types follow the OBSERVED live Keitaro schema
 
 These shapes are isolated here (adapter layer) and covered by integration tests.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -136,7 +137,7 @@ def build_stream_update_payload(stream: dict[str, Any]) -> dict[str, Any]:
         for o in (stream.get("offers") or [])
     ]
     payload["landings"] = [
-        {k: v for k, v in l.items() if k not in ("id", "stream_id", "oid")}
-        for l in (stream.get("landings") or [])
+        {k: v for k, v in landing.items() if k not in ("id", "stream_id", "oid")}
+        for landing in (stream.get("landings") or [])
     ]
     return payload

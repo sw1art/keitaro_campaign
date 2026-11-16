@@ -1,8 +1,12 @@
 """Pure domain value objects and business rules (no framework dependencies)."""
+
 from __future__ import annotations
 
+import hashlib
+import json
 import re
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from app.domain.exceptions import BusinessRuleError, ValidationError
 
@@ -20,9 +24,7 @@ def calculate_distribution(offers: Sequence[Mapping[str, Any]]) -> dict[int, flo
     total = sum(float(o["share"]) for o in offers)
     if total <= 0:
         return {}
-    return {
-        int(o["offer_id"]): round(float(o["share"]) / total * 100.0, 2) for o in offers
-    }
+    return {int(o["offer_id"]): round(float(o["share"]) / total * 100.0, 2) for o in offers}
 
 
 def normalize_geo_code(value: Any) -> str:
@@ -31,13 +33,13 @@ def normalize_geo_code(value: Any) -> str:
         raise ValidationError(f"Invalid GEO code: {value!r} is not a string")
     code = value.strip().upper()
     if not _GEO_RE.match(code):
-        raise ValidationError(f"Invalid GEO code: {value!r}. Expected ISO 3166-1 alpha-2 (e.g. AU).")
+        raise ValidationError(
+            f"Invalid GEO code: {value!r}. Expected ISO 3166-1 alpha-2 (e.g. AU)."
+        )
     return code
 
 
-def validate_geo_codes(
-    codes: Sequence[Any], *, valid_codes: set[str] | None = None
-) -> list[str]:
+def validate_geo_codes(codes: Sequence[Any], *, valid_codes: set[str] | None = None) -> list[str]:
     """Validate a list of GEO codes: non-empty, unique, well-formed, known.
 
     `valid_codes` optionally restricts values to a known set (ISO dictionary).
@@ -82,3 +84,14 @@ def validate_offer_shares(
         seen.add(offer_id)
         result.append({"offer_id": offer_id, "share": share})
     return result
+
+
+def offers_fingerprint(offers: Sequence[Mapping[str, Any]]) -> str:
+    """Stable hash of the (offer_id, share) pairs, order-insensitive.
+
+    Used for optimistic concurrency: the client sends the fingerprint of the
+    state it based its edit on; a mismatch means the stream changed meanwhile.
+    """
+    canon = sorted((int(o["offer_id"]), o["share"]) for o in offers)
+    payload = json.dumps(canon, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()

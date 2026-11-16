@@ -1,5 +1,7 @@
 import type { AdRobotApi } from '~/types/api-client'
+import type { AuditLogItem } from '~/types/audit'
 import type { Campaign, CreateCampaignRequest, CreateCampaignResponse } from '~/types/campaign'
+import type { Dashboard } from '~/types/dashboard'
 import type { Domain } from '~/types/domain'
 import type { GeoCountry } from '~/types/geo'
 import type { Offer } from '~/types/offer'
@@ -10,6 +12,9 @@ import type { ListResponse } from '~/types/api'
 import { ApiError } from './apiError'
 
 const DEFAULT_TIMEOUT_MS = 15_000
+
+// Shared API token, set once when the client is created.
+let apiToken: string | undefined
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
@@ -42,10 +47,14 @@ async function request<T>(base: string, path: string, options: RequestOptions = 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
 
+  const headers: Record<string, string> = {}
+  if (options.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (apiToken) headers['X-Api-Key'] = apiToken
+
   try {
     const response = await fetch(url, {
       method: options.method ?? 'GET',
-      headers: options.body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
       signal: controller.signal,
     })
@@ -81,7 +90,8 @@ async function request<T>(base: string, path: string, options: RequestOptions = 
   }
 }
 
-export function createRealApi(base: string): AdRobotApi {
+export function createRealApi(base: string, token?: string): AdRobotApi {
+  apiToken = token
   return {
     listCampaigns: (params) =>
       request<ListResponse<Campaign>>(base, '/campaigns', {
@@ -107,6 +117,15 @@ export function createRealApi(base: string): AdRobotApi {
       request<ListResponse<Operation>>(base, '/operations', { query: toQuery(params) }),
 
     getOperation: (id) => request<Operation>(base, `/operations/${id}`),
+
+    retryOperation: (id) => request<Operation>(base, `/operations/${id}/retry`, { method: 'POST' }),
+
+    getOperationAudit: async (id) => {
+      const data = await request<{ items: AuditLogItem[] }>(base, `/operations/${id}/audit`)
+      return data.items
+    },
+
+    getDashboard: () => request<Dashboard>(base, '/dashboard'),
 
     listGeo: async () => {
       const data = await request<{ items: GeoCountry[] }>(base, '/dictionaries/geo')

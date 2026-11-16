@@ -1,4 +1,5 @@
 """Repository ports (interfaces). Infrastructure provides implementations."""
+
 from __future__ import annotations
 
 from typing import Protocol
@@ -28,6 +29,8 @@ class OperationRepository(Protocol):
 
     async def list(self, *, limit: int, offset: int) -> tuple[list[Operation], int]: ...
 
+    async def counts(self) -> dict[str, int]: ...
+
 
 class OutboxRepository(Protocol):
     async def add(self, event: OutboxEvent) -> OutboxEvent: ...
@@ -41,3 +44,7 @@ class OutboxRepository(Protocol):
 
 class AuditRepository(Protocol):
     async def add(self, entry: AuditLogEntry) -> AuditLogEntry: ...
+
+    async def list_by_operation(self, operation_id: UUID) -> list[AuditLogEntry]: ...
+
+    async def list(self, *, limit: int, offset: int) -> tuple[list[AuditLogEntry], int]: ...

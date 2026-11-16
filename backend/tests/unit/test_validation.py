@@ -4,6 +4,7 @@ import pytest
 from app.domain.exceptions import BusinessRuleError, ValidationError
 from app.domain.value_objects import (
     normalize_geo_code,
+    offers_fingerprint,
     validate_geo_codes,
     validate_offer_shares,
 )
@@ -81,3 +82,21 @@ def test_validate_offer_shares_rejects_fraction():
 def test_validate_offer_shares_ok():
     result = validate_offer_shares([{"offer_id": 1, "share": 10}, {"offer_id": 2, "share": 100}])
     assert result == [{"offer_id": 1, "share": 10}, {"offer_id": 2, "share": 100}]
+
+
+def test_offers_fingerprint_is_order_insensitive():
+    a = [{"offer_id": 1, "share": 100}, {"offer_id": 2, "share": 50}]
+    b = [{"offer_id": 2, "share": 50}, {"offer_id": 1, "share": 100}]
+    assert offers_fingerprint(a) == offers_fingerprint(b)
+
+
+def test_offers_fingerprint_changes_on_share_change():
+    a = [{"offer_id": 1, "share": 100}]
+    b = [{"offer_id": 1, "share": 50}]
+    assert offers_fingerprint(a) != offers_fingerprint(b)
+
+
+def test_offers_fingerprint_changes_on_add():
+    a = [{"offer_id": 1, "share": 100}]
+    b = [{"offer_id": 1, "share": 100}, {"offer_id": 2, "share": 100}]
+    assert offers_fingerprint(a) != offers_fingerprint(b)

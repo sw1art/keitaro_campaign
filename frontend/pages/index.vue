@@ -19,19 +19,13 @@ async function load() {
   loading.value = true
   error.value = null
   try {
-    const [campaignsTotal, campaigns, operations, operationsAll] = await Promise.all([
-      api.listCampaigns({ page: 1, page_size: 1 }),
-      api.listCampaigns({ page: 1, page_size: 5 }),
-      api.listOperations({ page: 1, page_size: 5 }),
-      api.listOperations({ page: 1, page_size: 100 }),
-    ])
-
-    campaignCount.value = campaignsTotal.total
-    latestCampaigns.value = campaigns.items
-    latestOperations.value = operations.items
-    operationsTotal.value = operationsAll.total
-    successCount.value = operationsAll.items.filter((operation) => operation.status === 'completed').length
-    failedCount.value = operationsAll.items.filter((operation) => operation.status === 'failed').length
+    const dashboard = await api.getDashboard()
+    campaignCount.value = dashboard.campaigns_count
+    latestCampaigns.value = dashboard.recent_campaigns
+    latestOperations.value = dashboard.recent_operations
+    operationsTotal.value = dashboard.operations_total
+    successCount.value = dashboard.operations_completed
+    failedCount.value = dashboard.operations_failed
   } catch (err) {
     error.value = err instanceof ApiError ? err.message : 'Не удалось загрузить данные'
   } finally {

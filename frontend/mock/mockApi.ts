@@ -1,6 +1,8 @@
 import type { ListResponse } from '~/types/api'
 import type { AdRobotApi } from '~/types/api-client'
+import type { AuditLogItem } from '~/types/audit'
 import type { Campaign, CreateCampaignRequest, CreateCampaignResponse } from '~/types/campaign'
+import type { Dashboard } from '~/types/dashboard'
 import type { Operation } from '~/types/operation'
 import type { Stream } from '~/types/stream'
 import { ApiError } from '~/utils/apiError'
@@ -24,6 +26,13 @@ function clone<T>(value: T): T {
 function paginate<T>(items: T[], page: number, pageSize: number): ListResponse<T> {
   const start = (page - 1) * pageSize
   return { items: items.slice(start, start + pageSize), total: items.length, page, page_size: pageSize }
+}
+
+function mockFingerprint(offers: Array<{ offer_id: number; share: number }>): string {
+  return offers
+    .map((offer) => `${offer.offer_id}:${offer.share}`)
+    .sort()
+    .join('|')
 }
 
 /**
@@ -147,7 +156,12 @@ export function createMockApi(): AdRobotApi {
       await delay(300)
       const stream = findStream(id)
       if (!stream) throw new ApiError('NOT_FOUND', `Stream ${id} not found`, 404)
+      const current = mockFingerprint(stream.offers)
+      if (body.base_fingerprint && body.base_fingerprint !== current) {
+        throw new ApiError('CONFLICT', 'The stream was modified by someone else. Reload the campaign and retry.', 409)
+      }
       stream.offers = body.offers.map((offer) => ({ offer_id: offer.offer_id, state: 'active', share: offer.share }))
+      stream.fingerprint = mockFingerprint(stream.offers)
       return clone(stream)
     },
 
@@ -162,6 +176,50 @@ export function createMockApi(): AdRobotApi {
       const operation = operations.find((o) => o.operation_id === id)
       if (!operation) throw new ApiError('NOT_FOUND', `Operation ${id} not found`, 404)
       return clone(operation)
+    },
+
+    async retryOperation(id) {
+      await delay(250)
+      const operation = operations.find((o) => o.operation_id === id)
+      if (!operation) throw new ApiError('NOT_FOUND', `Operation ${id} not found`, 404)
+      if (operation.status !== 'failed') {
+        throw new ApiError('CONFLICT', 'Only failed operations can be retried.', 409)
+      }
+      operation.status = 'pending'
+      operation.error = null
+      operation.completed_at = null
+      return clone(operation)
+    },
+
+    async getOperationAudit(id) {
+      await delay(200)
+      const entries: AuditLogItem[] = [
+        {
+          id: uuid(),
+          operation_id: id,
+          action: 'campaign.create',
+          entity_type: 'campaign',
+          entity_id: '212150',
+          details: { keitaro_id: 212150 },
+          created_at: isoDate(new Date()),
+        },
+      ]
+      return entries
+    },
+
+    async getDashboard() {
+      await delay(250)
+      const recentCampaigns = [...campaigns].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 5)
+      const recentOperations = [...operations].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 5)
+      const dashboard: Dashboard = {
+        campaigns_count: campaigns.length,
+        recent_campaigns: recentCampaigns,
+        operations_total: operations.length,
+        operations_completed: operations.filter((o) => o.status === 'completed').length,
+        operations_failed: operations.filter((o) => o.status === 'failed').length,
+        recent_operations: recentOperations,
+      }
+      return dashboard
     },
 
     async listGeo() {

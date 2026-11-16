@@ -1,4 +1,5 @@
 """Transactional outbox: publish pending events to the broker."""
+
 from __future__ import annotations
 
 import logging
@@ -13,7 +14,9 @@ from app.infrastructure.repositories import Repositories
 logger = logging.getLogger(__name__)
 
 
-def build_event_message(event_type: str, operation_id: UUID, payload: dict[str, Any]) -> dict[str, Any]:
+def build_event_message(
+    event_type: str, operation_id: UUID, payload: dict[str, Any]
+) -> dict[str, Any]:
     """Message envelope delivered to the broker (no API token is included)."""
     return {
         "event_id": str(uuid4()),

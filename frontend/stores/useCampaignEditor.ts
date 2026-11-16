@@ -5,6 +5,7 @@ import { computeDistribution, isValidShare, offersDiffer, type ShareEntry } from
 interface EditorInit {
   id: number
   offers: Array<{ offer_id: number; share: number }>
+  fingerprint?: string | null
 }
 
 /**
@@ -16,6 +17,7 @@ export const useCampaignEditorStore = defineStore('campaignEditor', () => {
   const streamId = ref<number | null>(null)
   const originalOffers = ref<ShareEntry[]>([])
   const workingOffers = ref<ShareEntry[]>([])
+  const baseFingerprint = ref<string | null>(null)
 
   const distribution = computed(() => computeDistribution(workingOffers.value))
   const totalShare = computed(() => workingOffers.value.reduce((sum, offer) => sum + offer.share, 0))
@@ -29,12 +31,14 @@ export const useCampaignEditorStore = defineStore('campaignEditor', () => {
     const offers = init.offers.map((offer) => ({ offer_id: offer.offer_id, share: offer.share }))
     originalOffers.value = offers
     workingOffers.value = offers.map((offer) => ({ ...offer }))
+    baseFingerprint.value = init.fingerprint ?? null
   }
 
-  function applyServer(offers: Array<{ offer_id: number; share: number }>) {
+  function applyServer(offers: Array<{ offer_id: number; share: number }>, fingerprint?: string | null) {
     const next = offers.map((offer) => ({ offer_id: offer.offer_id, share: offer.share }))
     originalOffers.value = next
     workingOffers.value = next.map((offer) => ({ ...offer }))
+    if (fingerprint !== undefined) baseFingerprint.value = fingerprint
   }
 
   function addOffer(offerId: number) {
@@ -61,6 +65,7 @@ export const useCampaignEditorStore = defineStore('campaignEditor', () => {
     streamId,
     originalOffers,
     workingOffers,
+    baseFingerprint,
     distribution,
     totalShare,
     isDirty,

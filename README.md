@@ -14,8 +14,13 @@ Web-приложение для управления рекламными кам
   - *Offer Flow* — отправляет остальной трафик на выбранные офферы с равномерным стартовым распределением.
 - **Список кампаний**: поиск, фильтр по статусу, переход к деталям.
 - **Редактор**: просмотр потоков, добавление/удаление офферов, изменение `share`,
-  автоматический пересчёт процентов распределения, сохранение полным PUT без потери настроек.
+  автоматический пересчёт процентов распределения, сохранение полным PUT без потери настроек,
+  защита от конкурентного редактирования (optimistic concurrency).
 - **Асинхронное создание** через RabbitMQ + transactional outbox (статус операции, идемпотентность).
+- **Операции**: история, статус с авто-обновлением, повтор (retry) упавших операций, аудит-лог.
+- **Дашборд**: счётчики кампаний и операций, последние кампании и операции.
+- **Безопасность и надёжность**: опциональная аутентификация API, rate limiting, security-заголовки,
+  correlation-id, `/healthz` и `/readyz`, fail-fast при отсутствии секретов.
 
 ## Архитектура
 
@@ -97,6 +102,10 @@ docker compose down
 | `POSTGRES_*` | Подключение к PostgreSQL |
 | `RABBITMQ_*` | Подключение к RabbitMQ |
 | `CORS_ORIGINS` | Разрешённые origin'ы фронта |
+| `LOG_LEVEL` | Уровень логирования (по умолчанию `INFO`) |
+| `ADROBOT_API_TOKEN` | Опциональный общий токен API (пусто = аутентификация отключена) |
+| `RATE_LIMIT_ENABLED` / `RATE_LIMIT_PER_MINUTE` | Rate limiting на один IP |
+| `NUXT_PUBLIC_API_BASE` / `NUXT_PUBLIC_API_TOKEN` / `NUXT_PUBLIC_MOCK` | Настройки SPA-фронта (встраиваются при сборке) |
 
 Секреты хранятся только в `.env` (не в коде и не в Docker-образах); токен никогда не
 передаётся на фронтенд.
@@ -108,11 +117,12 @@ docker compose run --rm migrate alembic upgrade head      # применить
 docker compose run --rm migrate alembic revision --autogenerate -m "..."  # создать
 ```
 
-## Тесты
+## Тесты и линтинг
 
 ```bash
 docker compose run --rm --no-deps backend pytest          # unit + integration (mock HTTP/SQLite)
-docker compose run --rm --no-deps backend pytest -m unit  # только unit
+docker compose run --rm --no-deps backend ruff check app  # линтинг
+cd frontend && npm run typecheck && npm test              # frontend
 ```
 
 ## Примеры API-запросов
@@ -127,10 +137,20 @@ curl -X POST http://localhost:8000/api/v1/campaigns \
 # Статус операции
 curl http://localhost:8000/api/v1/operations/<operation_id>
 
+# Повтор упавшей операции
+curl -X POST http://localhost:8000/api/v1/operations/<operation_id>/retry
+
+# Дашборд / аудит
+curl http://localhost:8000/api/v1/dashboard
+curl 'http://localhost:8000/api/v1/audit-logs?page_size=50'
+
+# Готовность сервиса (DB / RabbitMQ / Keitaro)
+curl http://localhost:8000/readyz
+
 # Список кампаний
 curl 'http://localhost:8000/api/v1/campaigns?search=&page=1&page_size=20'
 
-# Обновление офферов потока (share: integer 1..100)
+# Обновление офферов потока (share: integer 1..100; base_fingerprint — для optimistic concurrency)
 curl -X PUT http://localhost:8000/api/v1/streams/<stream_id>/offers \
   -H 'Content-Type: application/json' \
   -d '{"offers":[{"offer_id":25327,"share":100},{"offer_id":24800,"share":50}]}'

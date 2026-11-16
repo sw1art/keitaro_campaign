@@ -1,7 +1,8 @@
 """SQLAlchemy repository implementations of the domain repository ports."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -12,7 +13,7 @@ from app.infrastructure.database import models
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class SqlCampaignRepository:
@@ -128,6 +129,12 @@ class SqlOperationRepository:
         )
         return [self._to_entity(m) for m in res.scalars().all()], int(total or 0)
 
+    async def counts(self) -> dict[str, int]:
+        res = await self.session.execute(
+            select(models.Operation.status, func.count()).group_by(models.Operation.status)
+        )
+        return {status: int(count) for status, count in res.all()}
+
     @staticmethod
     def _to_entity(model: models.Operation | None) -> Operation | None:
         if model is None:
@@ -221,6 +228,36 @@ class SqlAuditRepository:
         await self.session.flush()
         entry.created_at = model.created_at
         return entry
+
+    async def list_by_operation(self, operation_id: UUID) -> list[AuditLogEntry]:
+        res = await self.session.execute(
+            select(models.AuditLog)
+            .where(models.AuditLog.operation_id == operation_id)
+            .order_by(models.AuditLog.created_at.asc())
+        )
+        return [self._to_entity(m) for m in res.scalars().all()]
+
+    async def list(self, *, limit: int, offset: int) -> tuple[list[AuditLogEntry], int]:
+        total = await self.session.scalar(select(func.count()).select_from(models.AuditLog))
+        res = await self.session.execute(
+            select(models.AuditLog)
+            .order_by(models.AuditLog.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return [self._to_entity(m) for m in res.scalars().all()], int(total or 0)
+
+    @staticmethod
+    def _to_entity(model: models.AuditLog) -> AuditLogEntry:
+        return AuditLogEntry(
+            id=model.id,
+            operation_id=model.operation_id,
+            action=model.action,
+            entity_type=model.entity_type,
+            entity_id=model.entity_id,
+            details=model.details,
+            created_at=model.created_at,
+        )
 
 
 class Repositories:

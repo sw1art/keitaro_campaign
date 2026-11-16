@@ -1,4 +1,5 @@
 """RabbitMQ topology: exchanges, queues, bindings."""
+
 from __future__ import annotations
 
 import aio_pika

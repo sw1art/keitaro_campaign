@@ -1,9 +1,11 @@
 """Campaign creation orchestration (use case)."""
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from app.application.dto import CreateCampaignCommand
@@ -26,7 +28,7 @@ CommitFn = Callable[[], Awaitable[None]]
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def classify_keitaro_error(exc: KeitaroApiError) -> Exception:
@@ -199,7 +201,9 @@ class CampaignCreationService:
         filters = google.get("filters") or []
         country_filter = next((f for f in filters if f.get("name") == "country"), None)
         if country_filter is None or sorted(country_filter.get("payload") or []) != sorted(cmd.geo):
-            raise PermanentError("Google Redirect GEO filter does not match the requested GEO list.")
+            raise PermanentError(
+                "Google Redirect GEO filter does not match the requested GEO list."
+            )
 
         offer_flow = by_id.get(offer_stream_id)
         if offer_flow is None:
@@ -207,11 +211,13 @@ class CampaignCreationService:
         offer_ids = [o.get("offer_id") for o in (offer_flow.get("offers") or [])]
         if sorted(offer_ids) != sorted(cmd.offer_ids):
             raise PermanentError("Offer Flow offers do not match the requested offers.")
-        for o in (offer_flow.get("offers") or []):
+        for o in offer_flow.get("offers") or []:
             if int(o.get("share", 0)) != self.settings.default_offer_share:
                 raise PermanentError("Offer Flow shares are not the expected initial value.")
 
-    async def _audit(self, operation: Operation, action: str, entity_type: str, entity_id: int) -> None:
+    async def _audit(
+        self, operation: Operation, action: str, entity_type: str, entity_id: int
+    ) -> None:
         try:
             await self.audit.add(
                 AuditLogEntry(

@@ -1,4 +1,5 @@
 """Reference data routers: offers, domains, traffic sources, GEO dictionary."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
@@ -74,9 +75,7 @@ async def list_traffic_sources(
     keitaro: KeitaroClient = Depends(get_keitaro),
 ) -> TrafficSourceListResponse:
     raw = await keitaro.get_traffic_sources()
-    items = [
-        TrafficSourceItem(id=t["id"], name=t.get("name"), state=t.get("state")) for t in raw
-    ]
+    items = [TrafficSourceItem(id=t["id"], name=t.get("name"), state=t.get("state")) for t in raw]
     return TrafficSourceListResponse(items=items)
 
 

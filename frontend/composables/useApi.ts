@@ -16,8 +16,9 @@ export function useApi(): AdRobotApi {
   const mockValue: unknown = config.public.mock
   const mock = mockValue === true || mockValue === 'true' || mockValue === '1'
   const base = typeof config.public.apiBase === 'string' ? config.public.apiBase : 'http://localhost:8000/api/v1'
+  const token = typeof config.public.apiToken === 'string' ? config.public.apiToken : undefined
 
-  client = mock ? createMockApi() : createRealApi(base)
+  client = mock ? createMockApi() : createRealApi(base, token)
   return client
 }
 

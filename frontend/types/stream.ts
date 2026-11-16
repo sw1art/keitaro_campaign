@@ -27,6 +27,7 @@ export interface Stream {
   filters: StreamFilter[]
   offers: StreamOffer[]
   landings: unknown[]
+  fingerprint: string | null
 }
 
 export interface StreamOfferUpdate {
@@ -36,4 +37,6 @@ export interface StreamOfferUpdate {
 
 export interface UpdateStreamOffersRequest {
   offers: StreamOfferUpdate[]
+  /** Fingerprint of the offers state the client based its edit on (optimistic concurrency). */
+  base_fingerprint?: string
 }

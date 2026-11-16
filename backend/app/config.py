@@ -1,4 +1,5 @@
 """Application configuration loaded from environment / .env."""
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -9,11 +10,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Central configuration. Secrets live in env vars / .env, never in code."""
 
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_env: str = "dev"
+    log_level: str = "INFO"
 
     # --- Keitaro integration ---
     keitaro_base_url: str = "https://tlgk.host/admin_api/v1"
@@ -41,8 +41,13 @@ class Settings(BaseSettings):
     rabbitmq_password: str = "adrobot"
     rabbitmq_vhost: str = "/"
 
-    # --- App ---
+    # --- App / security ---
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    # If set, every /api/v1 request must send this value as `X-Api-Key` or
+    # `Authorization: Bearer <token>`. Empty = auth disabled (dev/test).
+    adrobot_api_token: str = ""
+    rate_limit_enabled: bool = True
+    rate_limit_per_minute: int = 120
 
     @property
     def database_url(self) -> str:
@@ -61,6 +66,17 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def auth_enabled(self) -> bool:
+        return bool(self.adrobot_api_token)
+
+    def check_secrets(self) -> None:
+        """Fail fast when a required secret is missing (never in tests)."""
+        if not self.keitaro_api_token:
+            raise RuntimeError(
+                "KEITARO_API_TOKEN is not set. Configure it in the environment or .env."
+            )
 
 
 @lru_cache

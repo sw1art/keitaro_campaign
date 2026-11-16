@@ -1,4 +1,5 @@
 """RabbitMQ consumer for the campaign.create queue."""
+
 from __future__ import annotations
 
 import asyncio

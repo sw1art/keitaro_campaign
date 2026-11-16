@@ -137,6 +137,13 @@ export function makeCampaigns(): Campaign[] {
   })
 }
 
+function mockFingerprint(offers: Array<{ offer_id: number; share: number }>): string {
+  return offers
+    .map((offer) => `${offer.offer_id}:${offer.share}`)
+    .sort()
+    .join('|')
+}
+
 export function makeStreams(
   campaign: Campaign,
   offerIds: number[],
@@ -144,7 +151,7 @@ export function makeStreams(
 ): { streams: Stream[]; nextStreamId: number } {
   const googleRedirect: Stream = {
     id: startStreamId,
-    type: 'forced',
+    type: 'regular',
     name: 'Google Redirect',
     campaign_id: campaign.id,
     position: 1,
@@ -154,30 +161,33 @@ export function makeStreams(
     action_payload: 'https://google.com',
     collect_clicks: true,
     filter_or: false,
-    weight: 100,
+    weight: 0,
     offer_selection: 'before_click',
     filters: [{ name: 'country', mode: 'accept', payload: ['AU', 'MX', 'RO'] }],
     offers: [],
     landings: [],
+    fingerprint: mockFingerprint([]),
   }
 
+  const flowOffers = offerIds.map((offerId) => ({ offer_id: offerId, state: 'active', share: 100 }))
   const offerFlow: Stream = {
     id: startStreamId + 1,
-    type: 'forced',
+    type: 'regular',
     name: 'Offer Flow',
     campaign_id: campaign.id,
     position: 2,
     state: 'active',
     schema: 'landings',
-    action_type: '',
+    action_type: 'http',
     action_payload: '',
     collect_clicks: true,
     filter_or: false,
-    weight: 100,
+    weight: 0,
     offer_selection: 'before_click',
     filters: [],
-    offers: offerIds.map((offerId) => ({ offer_id: offerId, state: 'active', share: 100 })),
+    offers: flowOffers,
     landings: [],
+    fingerprint: mockFingerprint(flowOffers),
   }
 
   return { streams: [googleRedirect, offerFlow], nextStreamId: startStreamId + 2 }
