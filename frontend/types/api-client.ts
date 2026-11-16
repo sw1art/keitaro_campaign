@@ -1,4 +1,4 @@
-import type { CampaignListParams, ListResponse, OfferListParams, OperationListParams } from './api'
+import type { CampaignListParams, ListParams, ListResponse, OfferListParams, OperationListParams } from './api'
 import type {
   AnalyticsCampaign,
   AnalyticsExportQuery,
@@ -35,6 +35,7 @@ export interface AdRobotApi {
   getOperation(id: string): Promise<Operation>
   retryOperation(id: string): Promise<Operation>
   getOperationAudit(id: string): Promise<AuditLogItem[]>
+  listAuditLogs(params?: ListParams): Promise<ListResponse<AuditLogItem>>
   getDashboard(): Promise<Dashboard>
   listGeo(): Promise<GeoCountry[]>
   listOffers(params?: OfferListParams): Promise<ListResponse<Offer>>

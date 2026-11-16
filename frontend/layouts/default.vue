@@ -14,6 +14,7 @@ const nav = [
   { to: '/campaigns', label: 'Кампании' },
   { to: '/analytics', label: 'Аналитика' },
   { to: '/campaigns/create', label: 'Создать кампанию' },
+  { to: '/logs', label: 'Логи' },
 ]
 
 function isActive(to: string): boolean {

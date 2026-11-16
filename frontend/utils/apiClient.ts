@@ -136,6 +136,9 @@ export function createRealApi(base: string, token?: string): AdRobotApi {
       return data.items
     },
 
+    listAuditLogs: (params) =>
+      request<ListResponse<AuditLogItem>>(base, '/audit-logs', { query: toQuery(params) }),
+
     getDashboard: () => request<Dashboard>(base, '/dashboard'),
 
     listGeo: async () => {

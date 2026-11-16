@@ -263,6 +263,31 @@ export function createMockApi(): AdRobotApi {
       return entries
     },
 
+    async listAuditLogs(params = {}) {
+      await delay(200)
+      const items: AuditLogItem[] = [
+        {
+          id: uuid(),
+          operation_id: null,
+          action: 'campaign.create',
+          entity_type: 'campaign',
+          entity_id: '212150',
+          details: {},
+          created_at: isoDate(new Date()),
+        },
+        {
+          id: uuid(),
+          operation_id: null,
+          action: 'stream.create',
+          entity_type: 'stream',
+          entity_id: '1311444',
+          details: {},
+          created_at: isoDate(new Date()),
+        },
+      ]
+      return paginate(items, params.page ?? 1, params.page_size ?? 20)
+    },
+
     async getDashboard() {
       await delay(250)
       const recentCampaigns = [...campaigns].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 5)
