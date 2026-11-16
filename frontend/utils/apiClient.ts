@@ -1,9 +1,20 @@
 import type { AdRobotApi } from '~/types/api-client'
+import type {
+  AnalyticsCampaign,
+  AnalyticsExportQuery,
+  AnalyticsFilterQuery,
+  AnalyticsGeoResponse,
+  AnalyticsOffersResponse,
+  AnalyticsOverview,
+  AnalyticsQuery,
+  AnalyticsTrends,
+} from '~/types/analytics'
 import type { AuditLogItem } from '~/types/audit'
 import type { Campaign, CreateCampaignRequest, CreateCampaignResponse } from '~/types/campaign'
 import type { Dashboard } from '~/types/dashboard'
 import type { Domain } from '~/types/domain'
 import type { GeoCountry } from '~/types/geo'
+import type { Group } from '~/types/group'
 import type { Offer } from '~/types/offer'
 import type { Operation } from '~/types/operation'
 import type { Stream, UpdateStreamOffersRequest } from '~/types/stream'
@@ -144,5 +155,27 @@ export function createRealApi(base: string, token?: string): AdRobotApi {
       const data = await request<{ items: TrafficSource[] }>(base, '/traffic-sources')
       return data.items
     },
+
+    listGroups: async () => {
+      const data = await request<{ items: Group[] }>(base, '/groups')
+      return data.items
+    },
+
+    getAnalyticsOverview: (params) =>
+      request<AnalyticsOverview>(base, '/analytics/overview', { query: toQuery(params) }),
+
+    getAnalyticsTrends: (params) =>
+      request<AnalyticsTrends>(base, '/analytics/trends', { query: toQuery(params) }),
+
+    getAnalyticsCampaign: (id, params) =>
+      request<AnalyticsCampaign>(base, `/analytics/campaigns/${id}`, { query: toQuery(params) }),
+
+    getAnalyticsOffers: (params) =>
+      request<AnalyticsOffersResponse>(base, '/analytics/offers', { query: toQuery(params) }),
+
+    getAnalyticsGeo: (params) =>
+      request<AnalyticsGeoResponse>(base, '/analytics/geo', { query: toQuery(params) }),
+
+    getAnalyticsExportUrl: (params: AnalyticsExportQuery) => buildUrl(base, '/analytics/export', toQuery(params)),
   }
 }

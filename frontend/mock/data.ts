@@ -1,4 +1,4 @@
-import type { Campaign, Domain, GeoCountry, Offer, Operation, OperationStage, Stream, TrafficSource } from '~/types'
+import type { Campaign, Domain, GeoCountry, Group, Offer, Operation, OperationStage, Stream, TrafficSource } from '~/types'
 
 function pad(value: number): string {
   return String(value).padStart(2, '0')
@@ -93,6 +93,12 @@ export const TRAFFIC_SOURCES: TrafficSource[] = [
   { id: 836, name: 'FORTESTS', state: 'active' },
   { id: 837, name: 'Google Ads', state: 'active' },
   { id: 838, name: 'Facebook', state: 'disabled' },
+]
+
+export const GROUPS: Group[] = [
+  { id: 10332, name: 'FORTESTS', type: 'campaigns' },
+  { id: 10333, name: 'Test Campaigns', type: 'campaigns' },
+  { id: 10334, name: 'Landings', type: 'landings' },
 ]
 
 export function makeCampaigns(): Campaign[] {

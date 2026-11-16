@@ -152,7 +152,10 @@ onMounted(load)
           {{ campaign?.name ?? `Кампания #${campaignId}` }}
         </h1>
       </div>
-      <AppStatusBadge v-if="campaign" :status="campaign.state" />
+      <div class="flex items-center gap-2">
+        <NuxtLink :to="`/analytics/campaigns/${campaignId}`" class="btn btn-secondary">Аналитика</NuxtLink>
+        <AppStatusBadge v-if="campaign" :status="campaign.state" />
+      </div>
     </div>
 
     <AppSpinner v-if="loading" label="Загрузка кампании…" />

@@ -15,6 +15,9 @@ export interface CampaignListParams extends ListParams {
   state?: string
   sort_by?: string
   sort_order?: 'asc' | 'desc'
+  domain_id?: number
+  traffic_source_id?: number
+  group_id?: number
 }
 
 export interface OfferListParams extends ListParams {

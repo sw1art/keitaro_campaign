@@ -1,12 +1,24 @@
 import type { ListResponse } from '~/types/api'
 import type { AdRobotApi } from '~/types/api-client'
+import type {
+  AnalyticsCampaign,
+  AnalyticsExportQuery,
+  AnalyticsFilterQuery,
+  AnalyticsGeoResponse,
+  AnalyticsOffersResponse,
+  AnalyticsOverview,
+  AnalyticsQuery,
+  AnalyticsTrends,
+} from '~/types/analytics'
 import type { AuditLogItem } from '~/types/audit'
 import type { Campaign, CreateCampaignRequest, CreateCampaignResponse } from '~/types/campaign'
 import type { Dashboard } from '~/types/dashboard'
+import type { Group } from '~/types/group'
 import type { Operation } from '~/types/operation'
 import type { Stream } from '~/types/stream'
 import { ApiError } from '~/utils/apiError'
-import { dbDate, DOMAINS, GEO, isoDate, makeCampaigns, makeOperations, makeStreams, OFFERS, TRAFFIC_SOURCES } from './data'
+import { makeCampaignAnalytics, makeCsv, makeGeoAnalytics, makeOffersAnalytics, makeOverview, makeTrends } from './analyticsData'
+import { dbDate, DOMAINS, GEO, GROUPS, isoDate, makeCampaigns, makeOperations, makeStreams, OFFERS, TRAFFIC_SOURCES } from './data'
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -72,6 +84,9 @@ export function createMockApi(): AdRobotApi {
         items = items.filter((c) => String(c.id).includes(query) || c.name.toLowerCase().includes(query))
       }
       if (params?.state) items = items.filter((c) => c.state === params.state)
+      if (params?.domain_id) items = items.filter((c) => c.domain_id === params.domain_id)
+      if (params?.traffic_source_id) items = items.filter((c) => c.traffic_source_id === params.traffic_source_id)
+      if (params?.group_id) items = items.filter((c) => c.group_id === params.group_id)
       const sortBy = params?.sort_by ?? 'created_at'
       const sortOrder = params?.sort_order ?? 'desc'
       items.sort((a, b) => {
@@ -287,6 +302,53 @@ export function createMockApi(): AdRobotApi {
     async listTrafficSources() {
       await delay(200)
       return clone(TRAFFIC_SOURCES)
+    },
+
+    async listGroups() {
+      await delay(150)
+      return clone(GROUPS)
+    },
+
+    async getAnalyticsOverview(params: AnalyticsQuery = { range: 'last_7_days' }) {
+      await delay(250)
+      return makeOverview(params.range ?? 'last_7_days', params.from, params.to, params.timezone)
+    },
+
+    async getAnalyticsTrends(params: AnalyticsQuery = { range: 'last_7_days' }) {
+      await delay(250)
+      return makeTrends(params.range ?? 'last_7_days', params.from, params.to, params.timezone)
+    },
+
+    async getAnalyticsCampaign(id, params: AnalyticsQuery = { range: 'last_7_days' }) {
+      await delay(250)
+      const campaign = campaigns.find((c) => c.id === id)
+      if (!campaign) throw new ApiError('NOT_FOUND', `Campaign ${id} not found`, 404)
+      const streams = streamsByCampaign.get(id) ?? []
+      const offerFlow = streams.find((s) => s.schema === 'landings')
+      const offerIds = (offerFlow?.offers ?? []).map((o) => o.offer_id)
+      return makeCampaignAnalytics(id, offerIds, params.range ?? 'last_7_days', params.from, params.to, params.timezone)
+    },
+
+    async getAnalyticsOffers(params: AnalyticsFilterQuery = { range: 'last_7_days' }) {
+      await delay(250)
+      const campaignId = params.campaign_id ?? null
+      let offerIds: number[] | null = null
+      if (campaignId !== null) {
+        const streams = streamsByCampaign.get(campaignId) ?? []
+        const offerFlow = streams.find((s) => s.schema === 'landings')
+        offerIds = (offerFlow?.offers ?? []).map((o) => o.offer_id)
+      }
+      return makeOffersAnalytics(campaignId, offerIds, params.range ?? 'last_7_days', params.from, params.to, params.timezone)
+    },
+
+    async getAnalyticsGeo(params: AnalyticsFilterQuery = { range: 'last_7_days' }) {
+      await delay(250)
+      return makeGeoAnalytics(params.range ?? 'last_7_days', params.from, params.to, params.timezone)
+    },
+
+    getAnalyticsExportUrl(params: AnalyticsExportQuery) {
+      const csv = makeCsv(params.type)
+      return `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`
     },
   }
 }

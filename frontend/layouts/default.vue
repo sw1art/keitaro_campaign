@@ -12,6 +12,7 @@ const mockEnabled = computed(() => {
 const nav = [
   { to: '/', label: 'Дашборд' },
   { to: '/campaigns', label: 'Кампании' },
+  { to: '/analytics', label: 'Аналитика' },
   { to: '/campaigns/create', label: 'Создать кампанию' },
 ]
 
