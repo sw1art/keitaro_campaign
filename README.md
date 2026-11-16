@@ -1,148 +1,192 @@
 # AdRobot
 
-Web-приложение для управления рекламными кампаниями в трекере **Keitaro**.
+> Веб-приложение для управления рекламными кампаниями в трекере **Keitaro**: от создания кампании до аналитики эффективности офферов.
 
-Обёртка над Keitaro, которая убирает ручную настройку: создаёт кампанию с двумя
-потоками маршрутизации (Google Redirect + Offer Flow) и позволяет редактировать
-офферы и веса распределения в существующих кампаниях.
+[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Nuxt 3](https://img.shields.io/badge/Frontend-Nuxt%203-00DC82?logo=nuxt.js&logoColor=white)](https://nuxt.com)
+[![PostgreSQL](https://img.shields.io/badge/DB-PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![RabbitMQ](https://img.shields.io/badge/Queue-RabbitMQ-FF6600?logo=rabbitmq&logoColor=white)](https://www.rabbitmq.com)
+[![Grafana](https://img.shields.io/badge/Logs-Grafana%2FLoki-F46800?logo=grafana&logoColor=white)](https://grafana.com)
+[![Docker](https://img.shields.io/badge/Deploy-Docker%20Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 
-## Возможности
+---
 
-- **Создание кампании**: название, GEO (ISO-коды, мультивыбор), офферы, домен.
-  Автоматически создаются два потока:
-  - *Google Redirect* — ловит пользователей из выбранных GEO и редиректит на Google;
-  - *Offer Flow* — отправляет остальной трафик на выбранные офферы с равномерным стартовым распределением.
-- **Список кампаний**: поиск, фильтр по статусу, переход к деталям.
-- **Редактор**: просмотр потоков, добавление/удаление офферов, изменение `share`,
-  автоматический пересчёт процентов распределения, сохранение полным PUT без потери настроек,
-  защита от конкурентного редактирования (optimistic concurrency).
-- **Асинхронное создание** через RabbitMQ + transactional outbox: saga-этапы
-  (`создание кампании → Google Redirect → Offer Flow → проверка`), идемпотентность,
-  частичное сохранение при сбоях (`partially_failed` / `needs_attention`), повтор упавших операций.
-- **Операции**: история, статус с авто-обновлением и прогрессом по этапам, повтор (retry), аудит-лог.
-- **Дашборд**: счётчики кампаний и операций, последние кампании и операции.
-- **Безопасность и надёжность**: опциональная аутентификация API, rate limiting, security-заголовки,
-  correlation-id, `/healthz` + `/health/live` + `/health/ready` + `/health/keitaro`, fail-fast при отсутствии секретов,
-  кэш справочников с ручным сбросом, защита от конкурентного редактирования.
+## Оглавление
 
-## Архитектура
+1. [Что это](#что-это)
+2. [Быстрый старт](#-быстрый-старт)
+3. [Возможности](#возможности)
+4. [Как это работает](#как-это-работает)
+5. [Технологический стек](#технологический-стек)
+6. [Настройка `.env`](#настройка-env)
+7. [Миграции, тесты, линтинг](#миграции-тесты-линтинг)
+8. [Примеры API](#примеры-api)
+9. [Логирование и наблюдаемость](#логирование-и-наблюдаемость)
+10. [Что сделано сверх ТЗ](#что-сделано-сверх-тз)
+11. [Паттерны и приёмы](#паттерны-и-приёмы)
+12. [Известные ограничения](#известные-ограничения)
 
-Модульный монолит: FastAPI (backend) + отдельный Worker + Nuxt 3 (frontend).
-Подробнее: [docs/architecture.md](docs/architecture.md).
-Интеграция с Keitaro: [docs/keitaro-integration.md](docs/keitaro-integration.md).
+---
 
-## Что сделано сверх ТЗ
+## Что это
 
-Исходное ТЗ требовало: FastAPI + SQLAlchemy (async), создание кампании с двумя
-потоками, редактор офферов с пересчётом долей, RabbitMQ + Worker + outbox, миграции,
-Docker Compose, тесты и README. Сверх этого реализовано:
+**AdRobot** — обёртка над рекламным трекером [Keitaro](https://keitaro.io), которая избавляет от ручной настройки кампаний. Вместо кликов по админке трекера вы управляете всем через удобный веб-интерфейс.
 
-- **Аналитика (версия 1.1)** на базе Keitaro Custom Reports API (`POST /report/build`):
-  - дашборд с 13 метриками (clicks, unique clicks, conversions, leads, sales, rejected,
-    CR, cost, revenue, profit, ROI, EPC, CPA) и дельтами к прошлому периоду;
-  - графики динамики (Clicks/Conversions, Revenue/Cost/Profit, ROI, CR) по дням;
-  - аналитика отдельной кампании (потоки / офферы / GEO);
-  - **Offer Performance** — сравнение планового (`share`) и фактического распределения трафика;
-  - GEO-аналитика по странам;
-  - экспорт CSV.
-- **Saga для создания кампании** — этапы (`creating_campaign → creating_google_stream →
-  creating_offer_stream → verifying → completed`), статусы `partially_failed` / `needs_attention`,
-  прогресс по этапам, реконсилиация при таймауте (сначала проверяем, не создался ли объект).
-- **Безопасность**: опциональная API-аутентификация (`ADROBOT_API_TOKEN`), rate limiting,
-  security-заголовки, correlation-id, fail-fast при отсутствии секретов.
-- **Наблюдаемость**: `/healthz`, `/readyz` + `/health/live`, `/health/ready`, `/health/keitaro`,
-  логирование запросов с correlation-id, ошибки с correlation-id в теле ответа.
-- **Конкурентное редактирование**: optimistic concurrency (fingerprint офферов → `409`).
-- **Кэш справочников** (TTL 5 минут, ручной сброс `POST /dictionaries/refresh`, обход кэша при сохранении).
-- **Операции**: повтор упавшей (`POST /operations/{id}/retry`), аудит-лог, дашборд-эндпоинт.
-- **Расширенные фильтры/сортировка/пагинация** кампаний (домен, источник, группа; сортировка по всем колонкам).
-- **Тесты отказоустойчивости**: частичный сбой, повторная доставка, недоступность брокера, конфликт редактирования.
-- **Проверка и документирование реальных контрактов Keitaro** (в т.ч. Custom Reports) —
-  [docs/keitaro-integration.md](docs/keitaro-integration.md).
+Две главные задачи:
 
-## Паттерны и приёмы (и почему)
+| | Задача | Что делает |
+|---|---|---|
+| 🛠 | **Создание кампаний** | По названию, GEO, офферам и домену автоматически создаёт кампанию с двумя потоками трафика |
+| 📊 | **Аналитика и редактор** | Показывает эффективность и позволяет править распределение трафика между офферами |
 
-| Приём | Зачем применён |
-|---|---|
-| **Clean Architecture** (domain / application / infrastructure / presentation) | Домен не зависит от FastAPI/SQLAlchemy/Keitaro — бизнес-правила тестируются изолированно, внешние системы заменяемы в тестах. |
-| **Adapter Pattern** (`KeitaroClient` + `campaign_builder`) | Вся работа с Keitaro и преобразование его моделей — в одном месте. Смена версии/полей API Keitaro — точечные правки в адаптере, а не по всему коду. |
-| **Repository Pattern** (порты в domain, реализации в infrastructure) | Сервисы не знают про ORM; в тестах подставляются SQLite/fake-репозитории. |
-| **Dependency Injection** (FastAPI `Depends` + явные зависимости сервисов) | Явные зависимости, нет глобального состояния, лёгкая тестируемость. |
-| **Transactional Outbox** | Операция и событие пишутся в одной транзакции БД, публикация в RabbitMQ — отдельно (best-effort + poller). Не теряем события при недоступности брокера. |
-| **Saga + идемпотентность + частичный результат** | Каждый этап сохраняет созданный ID. Повторная доставка/retry не создаёт дублей, частично выполненные операции сохраняются и дозавершаются. |
-| **Optimistic Concurrency** (fingerprint → `409`) | Предотвращает перезапись чужих правок без блокировок и без потери настроек потока. |
-| **Retry / DLQ** (`campaign.create` → `.retry` → `.dlq`) | Временные ошибки переживаются с повторными попытками; окончательно упавшие задачи изолируются и не блокируют очередь. |
-| **Кэширование с обходом на сохранении** (TTL + сброс + `fresh=True`) | Меньше запросов к Keitaro на чтение, но при сохранении всегда перепроверяем актуальное состояние. |
-| **Correlation ID + логирование запросов** | Сквозная трассировка запроса, диагностика ошибок по `X-Request-ID`. |
-| **Defense in depth** (валидация и на backend, и на frontend) | Frontend не доверяем — все бизнес-правила проверяются на сервере. |
-| **Keitaro как источник истины** | Списки/детали читаются напрямую из Keitaro; Postgres хранит только операции/историю/связи. Нет рассинхронизации, доступны и кампании, созданные вне AdRobot. |
-| **Event-driven для длительных операций** (RabbitMQ + Worker) | HTTP-запрос не блокируется длительным созданием; worker можно масштабировать отдельно. |
-| **Async I/O везде** (httpx, aio-pika, asyncpg, async SQLAlchemy) | Высокая пропускная способность при множестве внешних вызовов без блокировки event loop. |
-| **Pydantic v2 + единая форма ошибок** (`{error:{code,message,correlation_id}}`) | Строгий и предсказуемый контракт API. |
-| **Модульный монолит (не микросервисы)** | Один репозиторий/код с отдельным процессом Worker: простота деплоя без сетевых накладок микросервисов, при этом асинхронность сохранена. |
-| **«Сначала проверь контракты»** (задание §21) | До написания кода проверены реальные payload/ответы Keitaro и Custom Reports API; расхождения зафиксированы в документации. |
-
-## Технологический стек
-
-- **Backend**: Python 3.12, FastAPI, SQLAlchemy 2 (async), asyncpg, Alembic, Pydantic v2, httpx, aio-pika.
-- **Worker**: aio-pika (RabbitMQ), transactional outbox.
-- **DB**: PostgreSQL 16; **Broker**: RabbitMQ 3.13.
-- **Frontend**: Nuxt 3, Vue 3, TypeScript, Pinia, Tailwind CSS.
-
-## Структура проекта
+Схема одной кампании:
 
 ```text
-backend/
-  app/
-    domain/         # сущности, value objects, исключения, порты репозиториев
-    application/    # use cases, DTO, порты, билдеры payload'ов
-    infrastructure/ # БД, репозитории, KeitaroClient, RabbitMQ, outbox
-    presentation/   # роутеры, схемы, зависимости, обработчики ошибок
-    worker/         # обработчик campaign.create
-    main.py
-  migrations/       # Alembic
-  tests/            # unit + integration
-frontend/           # Nuxt 3
-docs/
-docker-compose.yml
+                    ВХОДЯЩИЙ ТРАФИК
+                          │
+                          ▼
+                 ┌────────────────┐
+                 │ Google Redirect │   ← GEO-фильтр (country = accept)
+                 └────────────────┘
+                    │          │
+             GEO совпал     GEO не совпал
+                    │          │
+                    ▼          ▼
+              google.com   ┌─────────────┐
+                           │  Offer Flow  │  ← без фильтров (fallback)
+                           └─────────────┘
+                           распределение по share
+                    ┌──────────┬──────────┐
+                    ▼          ▼          ▼
+                 Offer A    Offer B    Offer C
 ```
 
-## Требования к окружению
+Ключевая идея — замкнутый цикл управления рекламой:
 
-- Docker и Docker Compose (v2+). Для локальной разработки — Python 3.12+ и Node 20+.
+```text
+Создание кампании → Анализ эффективности офферов → Корректировка share → Повторный анализ
+```
 
-## Установка и запуск (Docker Compose)
+---
+
+## 🚀 Быстрый старт
+
+### Требования
+
+- **Docker** и **Docker Compose** (v2+).
+
+### Запуск
 
 ```bash
+# 1. Клонируйте репозиторий
 git clone <repository-url>
 cd keitaro_campaign
 
-# 1. Подготовка переменных окружения
+# 2. Создайте .env из примера и укажите токен Keitaro
 cp .env.example .env
-#   отредактируйте .env: укажите KEITARO_API_TOKEN (и при необходимости остальные значения)
+#    отредактируйте KEITARO_API_TOKEN в .env
 
-# 2. Запуск всего стека
+# 3. Поднимите весь стек (первая сборка займёт пару минут)
 docker compose up -d --build
 
-# 3. Логи
+# 4. Логи
 docker compose logs -f
 
-# 4. Остановка
+# 5. Остановка
 docker compose down
 ```
 
-Сервисы:
+### Что запустилось
 
-| Сервис | URL |
+| Сервис | URL | Назначение |
+|---|---|---|
+| 🖥 **Frontend** | http://localhost:3000 | Веб-интерфейс (Nuxt 3) |
+| 🔌 **Backend API** | http://localhost:8000 | REST API (FastAPI) |
+| 📖 **Swagger** | http://localhost:8000/docs | Интерактивная документация API |
+| 🐇 **RabbitMQ** | http://localhost:15672 | Очереди сообщений (management) |
+| 📈 **Grafana** | http://localhost:3001 | Дашборд логов (`admin`/`admin`) |
+| 🪵 **Loki** | http://localhost:3100 | Хранилище логов |
+
+Миграции базы данных выполняются автоматически сервисом `migrate` перед стартом backend/worker.
+
+---
+
+## Возможности
+
+**Создание кампании**
+- Название, GEO (ISO-коды, мультивыбор), офферы, домен.
+- Автоматически два потока: *Google Redirect* (GEO-фильтр) и *Offer Flow* (fallback с равномерным `share=100`).
+
+**Редактирование**
+- Просмотр потоков, добавление/удаление офферов, изменение `share`.
+- Автопересчёт процентов распределения, сохранение полным `PUT` без потери настроек.
+- Защита от конкурентного редактирования (optimistic concurrency).
+
+**Аналитика** (Keitaro Custom Reports)
+- Дашборд с 13 метриками и дельтами к прошлому периоду.
+- Графики динамики (Clicks/Conversions, Revenue/Cost/Profit, ROI, CR).
+- Аналитика кампании (потоки / офферы / GEO).
+- **Offer Performance**: сравнение планового и фактического `share`.
+- GEO-аналитика, экспорт CSV.
+
+**Надёжность и эксплуатация**
+- Асинхронное создание через RabbitMQ + transactional outbox, saga-этапы, идемпотентность.
+- Повтор упавших операций, аудит-лог, история операций.
+- Health-проверки, структурированные логи (structlog + Grafana/Loki).
+
+**Безопасность**
+- Опциональная API-аутентификация, rate limiting, security-заголовки, correlation-id.
+
+---
+
+## Как это работает
+
+Модульный монолит: **FastAPI** (backend) + отдельный **Worker** + **Nuxt 3** (frontend).
+
+```text
+             Frontend (Nuxt 3, SPA)
+                     │
+                     ▼
+              FastAPI  (/api/v1)
+                     │
+        ┌────────────┼─────────────┐
+        ▼            ▼             ▼
+   Кампании      Аналитика       Офферы
+        └────────────┼─────────────┘
+                     ▼
+             Application layer
+                     ▼
+               Domain layer
+                     ▼
+              Infrastructure
+              /            \
+             ▼              ▼
+       PostgreSQL        Keitaro API
+             ▲
+             │
+         RabbitMQ ◄── Worker
+```
+
+- **Keitaro — источник истины**: списки и детали читаются напрямую из Keitaro, Postgres хранит только операции/историю/связи.
+- **Создание кампании** идёт асинхронно через RabbitMQ: `pending → creating_campaign → creating_google_stream → creating_offer_stream → verifying → completed`.
+
+Подробнее: [docs/architecture.md](docs/architecture.md) · [docs/keitaro-integration.md](docs/keitaro-integration.md) · [docs/api.md](docs/api.md).
+
+---
+
+## Технологический стек
+
+| Слой | Технологии |
 |---|---|
-| Frontend (Nuxt 3) | http://localhost:3000 |
-| Backend (FastAPI) | http://localhost:8000 |
-| Swagger / OpenAPI | http://localhost:8000/docs |
-| RabbitMQ management | http://localhost:15672 |
-| Grafana (логи/дашборды) | http://localhost:3001 |
-| Loki (API логов) | http://localhost:3100 |
+| Backend | Python 3.12, FastAPI, SQLAlchemy 2 (async), asyncpg, Alembic, Pydantic v2, httpx, structlog |
+| Worker | aio-pika (RabbitMQ), transactional outbox |
+| База данных | PostgreSQL 16 |
+| Брокер | RabbitMQ 3.13 |
+| Frontend | Nuxt 3, Vue 3, TypeScript, Pinia, Tailwind CSS, Chart.js |
+| Наблюдаемость | structlog, Promtail, Loki, Grafana |
+| Деплой | Docker, Docker Compose |
 
-Миграции выполняются автоматически сервисом `migrate` перед стартом backend/worker.
+---
 
 ## Настройка `.env`
 
@@ -158,102 +202,105 @@ docker compose down
 | `POSTGRES_*` | Подключение к PostgreSQL |
 | `RABBITMQ_*` | Подключение к RabbitMQ |
 | `CORS_ORIGINS` | Разрешённые origin'ы фронта |
-| `LOG_LEVEL` | Уровень логирования (по умолчанию `INFO`) |
+| `LOG_LEVEL` / `LOG_FORMAT` | Уровень логирования и формат (`json`/`console`) |
 | `ADROBOT_API_TOKEN` | Опциональный общий токен API (пусто = аутентификация отключена) |
 | `RATE_LIMIT_ENABLED` / `RATE_LIMIT_PER_MINUTE` | Rate limiting на один IP |
-| `NUXT_PUBLIC_API_BASE` / `NUXT_PUBLIC_API_TOKEN` / `NUXT_PUBLIC_MOCK` | Настройки SPA-фронта (встраиваются при сборке) |
-| `LOG_LEVEL` / `LOG_FORMAT` | Уровень логирования и формат (`json`/`console`) |
-| `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | Доступ к Grafana (по умолчанию `admin`/`admin`) |
+| `NUXT_PUBLIC_*` | Настройки SPA-фронта (встраиваются при сборке) |
+| `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | Доступ к Grafana |
 
-Секреты хранятся только в `.env` (не в коде и не в Docker-образах); токен никогда не
-передаётся на фронтенд.
+> 🔐 Секреты хранятся только в `.env` (не в коде и не в Docker-образах); токен никогда не передаётся на фронтенд.
 
-## Миграции
+---
 
-```bash
-docker compose run --rm migrate alembic upgrade head      # применить
-docker compose run --rm migrate alembic revision --autogenerate -m "..."  # создать
-```
-
-## Тесты и линтинг
+## Миграции, тесты, линтинг
 
 ```bash
-docker compose run --rm --no-deps backend pytest          # unit + integration (mock HTTP/SQLite)
+# Миграции
+docker compose run --rm migrate alembic upgrade head                    # применить
+docker compose run --rm migrate alembic revision --autogenerate -m "..." # создать
+
+# Тесты
+docker compose run --rm --no-deps backend pytest          # unit + integration
 docker compose run --rm --no-deps backend ruff check app  # линтинг
 cd frontend && npm run typecheck && npm test              # frontend
 ```
 
-## Логирование и наблюдаемость (structlog + Grafana / Loki / Promtail)
+---
 
-Backend и Worker пишут **структурированные JSON-логи через structlog**:
-
-- каждая строка — JSON: `event`, `level`, `logger`, `timestamp` (+ контекстные поля);
-- **correlation_id** (`X-Request-ID`) прокидывается во все логи запроса и в тело ошибок;
-- логи этапов создания кампании (`operation_id`, `stage`, `progress`);
-- **маскирование секретов** (поля `token`/`password`/`api_key`/`authorization` не попадают в логи);
-- формат переключается через `LOG_FORMAT` (`json` по умолчанию, `console` для локальной разработки).
-
-Сбор и визуализация — стек **Loki + Promtail + Grafana** (сервисы `loki`, `promtail`, `grafana` в Docker Compose):
-
-- Promtail читает Docker-логи контейнеров и шлёт их в Loki;
-- Loki хранит и индексирует логи с метками `service`, `logger`, `level`;
-- Grafana поднята с готовым datasource «Loki» и дашбордом **«AdRobot Logs»**
-  (объём логов по уровню, запросы в минуту, ошибки, tail всех логов).
-
-Как посмотреть логи:
-
-1. Откройте http://localhost:3001 (Grafana, по умолчанию `admin`/`admin`).
-2. Дашборд **AdRobot Logs** уже подключён к Loki.
-3. Для ручного запроса: `curl 'http://localhost:3100/loki/api/v1/query_range?query={app="adrobot"}'`.
-
-Просмотр логов в консоли:
+## Примеры API
 
 ```bash
-docker compose logs -f backend worker   # JSON-строки structlog
-```
-
-## Примеры API-запросов
-
-```bash
-# Создание кампании (async -> 202)
+# Создание кампании (асинхронно → 202 + operation_id)
 curl -X POST http://localhost:8000/api/v1/campaigns \
   -H 'Content-Type: application/json' \
   -d '{"name":"My Campaign","geo":["AU","MX"],"offer_ids":[25327,24800],"domain_id":1813}'
-# -> {"operation_id":"...","status":"pending","message":"Campaign creation started"}
 
 # Статус операции
 curl http://localhost:8000/api/v1/operations/<operation_id>
 
-# Повтор упавшей операции
-curl -X POST http://localhost:8000/api/v1/operations/<operation_id>/retry
-
-# Дашборд / аудит
-curl http://localhost:8000/api/v1/dashboard
-curl 'http://localhost:8000/api/v1/audit-logs?page_size=50'
-
-# Готовность сервиса (DB / RabbitMQ / Keitaro)
-curl http://localhost:8000/readyz
-
-# Список кампаний
-curl 'http://localhost:8000/api/v1/campaigns?search=&page=1&page_size=20'
-
-# Обновление офферов потока (share: integer 1..100; base_fingerprint — для optimistic concurrency)
+# Обновление офферов потока (share: integer 1..100)
 curl -X PUT http://localhost:8000/api/v1/streams/<stream_id>/offers \
   -H 'Content-Type: application/json' \
   -d '{"offers":[{"offer_id":25327,"share":100},{"offer_id":24800,"share":50}]}'
+
+# Аналитика
+curl 'http://localhost:8000/api/v1/analytics/overview?range=last_7_days'
+curl 'http://localhost:8000/api/v1/analytics/offers?campaign_id=211913'
 ```
 
-Полный контракт API — [docs/api.md](docs/api.md).
+Полный контракт — [docs/api.md](docs/api.md).
+
+---
+
+## Логирование и наблюдаемость
+
+Backend и Worker пишут **структурированные JSON-логи через structlog** (с `correlation_id`, маскированием секретов и этапами saga). Логи собираются в **Loki** через **Promtail** и визуализируются в **Grafana** (готовый дашборд «AdRobot Logs»).
+
+```text
+app (structlog JSON) ──▶ stdout ──▶ Promtail ──▶ Loki ──▶ Grafana
+```
+
+Откройте http://localhost:3001 → дашборд **AdRobot Logs**.
+
+---
+
+## Что сделано сверх ТЗ
+
+Исходное ТЗ: FastAPI + SQLAlchemy, создание кампании с двумя потоками, редактор офферов, RabbitMQ + Worker + outbox, миграции, Docker, тесты, README. Сверх этого:
+
+- **Аналитика v1.1** (Custom Reports): дашборд с 13 метриками и дельтами, графики, аналитика кампании, Offer Performance (план vs факт), GEO, CSV-экспорт.
+- **Saga создания кампании**: этапы, `partially_failed` / `needs_attention`, прогресс, реконсилиация при таймауте.
+- **Безопасность**: API-аутентификация, rate limiting, security-заголовки, correlation-id, fail-fast.
+- **Наблюдаемость**: structlog + Grafana/Loki/Promtail, health-эндпоинты.
+- **Конкурентное редактирование** (optimistic concurrency), **кэш справочников**, **retry/аудит/дашборд**.
+- **Расширенные фильтры/сортировка/пагинация** кампаний.
+- **Тесты отказоустойчивости** и **документирование реальных контрактов Keitaro**.
+
+---
+
+## Паттерны и приёмы
+
+| Приём | Зачем |
+|---|---|
+| **Clean Architecture** (domain/application/infrastructure/presentation) | Домен не зависит от фреймворков — бизнес-правила тестируются изолированно, внешние системы заменяемы. |
+| **Adapter Pattern** (`KeitaroClient` + `campaign_builder`) | Вся работа с Keitaro и преобразование его моделей — в одном месте. |
+| **Repository Pattern** | Сервисы не знают про ORM; в тестах подставляются SQLite/fake-репозитории. |
+| **Dependency Injection** | Явные зависимости, нет глобального состояния. |
+| **Transactional Outbox** | Событие и операция пишутся в одной транзакции; публикация в RabbitMQ — отдельно. |
+| **Saga + идемпотентность** | Каждый этап сохраняет созданный ID — повторная доставка не создаёт дублей. |
+| **Optimistic Concurrency** | Fingerprint состояния → `409` при конфликте, без блокировок. |
+| **Retry / DLQ** | Временные ошибки переживаются, упавшие задачи изолируются. |
+| **Кэш с обходом на сохранении** | Меньше запросов на чтение, но при сохранении — перепроверка live-состояния. |
+| **Correlation ID + structlog** | Сквозная трассировка запроса и ошибок. |
+| **Keitaro как источник истины** | Нет рассинхронизации, доступны и кампании, созданные вне AdRobot. |
+| **Event-driven + Async I/O** | HTTP не блокируется длительными операциями; worker масштабируется отдельно. |
+| **«Сначала проверь контракты»** | До кода проверены реальные payload/ответы Keitaro; расхождения задокументированы. |
+
+---
 
 ## Известные ограничения
 
-- `/offers` Keitaro не поддерживает серверный поиск/пагинацию — AdRobot загружает
-  список офферов и фильтрует/пагинирует на своей стороне.
-- Имя кампании в Keitaro уникально: повторное создание кампании с уже занятым именем
-  завершится ошибкой операции.
-- `share` оффера в Keitaro — целое число `1..100` (значения больше 100 и дробные отклоняются).
-- Конкурентное редактирование одного потока защищено повторным чтением полной
-  конфигурации непосредственно перед PUT (другие настройки потока не теряются).
-- Реальная маршрутизация (клик по URL кампании) с «неизвестным GEO» и «нет доступных
-  офферов» требует ручного клик-теста с известными IP — см. [docs/keitaro-integration.md](docs/keitaro-integration.md).
-- Кэш справочников — in-memory с TTL 5 минут (не распределённый); сброс — `POST /api/v1/dictionaries/refresh`.
+- `/offers` Keitaro не поддерживает серверный поиск/пагинацию — AdRobot фильтрует/пагинирует на своей стороне (кэш 5 минут, сброс `POST /api/v1/dictionaries/refresh`).
+- Имя кампании в Keitaro уникально: повторное создание с тем же именем вернёт ошибку операции.
+- `share` оффера — целое число `1..100` (больше 100 и дробные отклоняются).
+- Реальная маршрутизация (клик по URL кампании) с «неизвестным GEO» и «нет офферов» требует ручного клик-теста с известными IP — см. [docs/keitaro-integration.md](docs/keitaro-integration.md).
