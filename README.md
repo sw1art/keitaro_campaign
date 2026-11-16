@@ -84,7 +84,7 @@
 
 ```bash
 # 1. Клонируйте репозиторий
-git clone [<repository-url>](https://github.com/sw1art/keitaro_campaign.git)
+git clone https://github.com/sw1art/keitaro_campaign.git
 cd keitaro_campaign
 
 # 2. Создайте .env из примера и укажите токен Keitaro
