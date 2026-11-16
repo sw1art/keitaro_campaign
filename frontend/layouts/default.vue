@@ -55,7 +55,7 @@ function isActive(to: string): boolean {
 
     <footer class="border-t border-slate-200 bg-white">
       <div class="mx-auto max-w-7xl px-4 py-4 text-sm text-slate-400 sm:px-6">
-        AdRobot · управление кампаниями Keitaro
+        AdRobot (Это Легко) · управление кампаниями + Keitaro
       </div>
     </footer>
 
