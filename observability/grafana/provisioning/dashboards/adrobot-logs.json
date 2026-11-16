@@ -1,0 +1,71 @@
+{
+  "uid": "adrobot-logs",
+  "title": "AdRobot Logs",
+  "tags": ["adrobot", "logs"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Log volume by level",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"adrobot\"}[5m])) by (level)",
+          "legendFormat": "{{level}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 15, "lineWidth": 1 } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Requests per second",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"adrobot\"} | json | event=\"request\" [1m]))",
+          "legendFormat": "requests/min",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 15, "lineWidth": 1 } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "logs",
+      "title": "Errors",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "showTime": true, "sortOrder": "Descending" },
+      "targets": [
+        { "expr": "{app=\"adrobot\"} | json | level = \"error\"", "refId": "A" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "All logs",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "showTime": true, "sortOrder": "Descending" },
+      "targets": [
+        { "expr": "{app=\"adrobot\"}", "refId": "A" }
+      ]
+    }
+  ],
+  "templating": { "list": [] },
+  "timepicker": {}
+}

@@ -18,6 +18,7 @@ dependencies = [
     "pydantic-settings>=2.3,<3",
     "aio-pika>=9.4,<10",
     "pycountry>=24.6,<26",
+    "structlog>=24.1,<26",
 ]
 
 [project.optional-dependencies]

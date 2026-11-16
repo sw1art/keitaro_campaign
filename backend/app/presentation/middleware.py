@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from collections import defaultdict, deque
 
@@ -11,9 +10,10 @@ from fastapi import HTTPException, Request
 from starlette.responses import Response
 
 from app.config import Settings
+from app.infrastructure.logging import get_logger
 from app.presentation.context import set_correlation_id
 
-logger = logging.getLogger("app.access")
+logger = get_logger("app.access")
 
 _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -38,12 +38,12 @@ async def request_context_middleware(request: Request, call_next) -> Response:
         response.headers.setdefault(name, value)
 
     logger.info(
-        "method=%s path=%s status=%s duration_ms=%s",
-        request.method,
-        request.url.path,
-        response.status_code,
-        duration_ms,
-        extra={"correlation_id": cid},
+        "request",
+        method=request.method,
+        path=request.url.path,
+        status=response.status_code,
+        duration_ms=duration_ms,
+        correlation_id=cid,
     )
     return response
 

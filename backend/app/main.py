@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from app.config import Settings, get_settings
 from app.infrastructure.keitaro import KeitaroClient
+from app.infrastructure.logging import configure_logging
 from app.infrastructure.messaging.publisher import RabbitPublisher
 from app.presentation.api import (
     analytics,
@@ -58,6 +59,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings: Settings = get_settings()
+    configure_logging(settings.log_level, json_output=settings.log_format != "console")
     logging.getLogger().setLevel(settings.log_level.upper())
     logging.getLogger("app").setLevel(settings.log_level.upper())
 

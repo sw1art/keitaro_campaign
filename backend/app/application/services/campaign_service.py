@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -34,8 +33,9 @@ from app.domain.stages import (
     STAGE_VERIFYING,
     progress_for_stage,
 )
+from app.infrastructure.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("application.campaign")
 
 CommitFn = Callable[[], Awaitable[None]]
 
@@ -206,6 +206,12 @@ class CampaignCreationService:
         operation.progress = progress_for_stage(stage)
         await self.operations.save(operation)
         await self.commit()
+        logger.info(
+            "stage",
+            operation_id=str(operation.id),
+            stage=stage,
+            progress=operation.progress,
+        )
 
     async def _create_campaign_reconciled(self, cmd: CreateCampaignCommand, alias: str) -> int:
         payload = campaign_builder.build_campaign_payload(

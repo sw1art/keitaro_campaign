@@ -8,6 +8,7 @@ import logging
 from app.config import get_settings
 from app.infrastructure.database.base import build_engine, build_session_factory
 from app.infrastructure.keitaro import KeitaroClient
+from app.infrastructure.logging import configure_logging
 from app.infrastructure.messaging.consumer import WorkerConsumer
 from app.infrastructure.messaging.outbox import publish_pending
 from app.infrastructure.messaging.publisher import RabbitPublisher
@@ -49,10 +50,9 @@ async def run() -> None:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-5.5s [%(name)s] %(message)s",
-    )
+    settings = get_settings()
+    configure_logging(settings.log_level, json_output=settings.log_format != "console")
+    logging.basicConfig(level=settings.log_level.upper())
     asyncio.run(run())
 
 

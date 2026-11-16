@@ -139,6 +139,8 @@ docker compose down
 | Backend (FastAPI) | http://localhost:8000 |
 | Swagger / OpenAPI | http://localhost:8000/docs |
 | RabbitMQ management | http://localhost:15672 |
+| Grafana (логи/дашборды) | http://localhost:3001 |
+| Loki (API логов) | http://localhost:3100 |
 
 Миграции выполняются автоматически сервисом `migrate` перед стартом backend/worker.
 
@@ -160,6 +162,8 @@ docker compose down
 | `ADROBOT_API_TOKEN` | Опциональный общий токен API (пусто = аутентификация отключена) |
 | `RATE_LIMIT_ENABLED` / `RATE_LIMIT_PER_MINUTE` | Rate limiting на один IP |
 | `NUXT_PUBLIC_API_BASE` / `NUXT_PUBLIC_API_TOKEN` / `NUXT_PUBLIC_MOCK` | Настройки SPA-фронта (встраиваются при сборке) |
+| `LOG_LEVEL` / `LOG_FORMAT` | Уровень логирования и формат (`json`/`console`) |
+| `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | Доступ к Grafana (по умолчанию `admin`/`admin`) |
 
 Секреты хранятся только в `.env` (не в коде и не в Docker-образах); токен никогда не
 передаётся на фронтенд.
@@ -177,6 +181,35 @@ docker compose run --rm migrate alembic revision --autogenerate -m "..."  # со
 docker compose run --rm --no-deps backend pytest          # unit + integration (mock HTTP/SQLite)
 docker compose run --rm --no-deps backend ruff check app  # линтинг
 cd frontend && npm run typecheck && npm test              # frontend
+```
+
+## Логирование и наблюдаемость (structlog + Grafana / Loki / Promtail)
+
+Backend и Worker пишут **структурированные JSON-логи через structlog**:
+
+- каждая строка — JSON: `event`, `level`, `logger`, `timestamp` (+ контекстные поля);
+- **correlation_id** (`X-Request-ID`) прокидывается во все логи запроса и в тело ошибок;
+- логи этапов создания кампании (`operation_id`, `stage`, `progress`);
+- **маскирование секретов** (поля `token`/`password`/`api_key`/`authorization` не попадают в логи);
+- формат переключается через `LOG_FORMAT` (`json` по умолчанию, `console` для локальной разработки).
+
+Сбор и визуализация — стек **Loki + Promtail + Grafana** (сервисы `loki`, `promtail`, `grafana` в Docker Compose):
+
+- Promtail читает Docker-логи контейнеров и шлёт их в Loki;
+- Loki хранит и индексирует логи с метками `service`, `logger`, `level`;
+- Grafana поднята с готовым datasource «Loki» и дашбордом **«AdRobot Logs»**
+  (объём логов по уровню, запросы в минуту, ошибки, tail всех логов).
+
+Как посмотреть логи:
+
+1. Откройте http://localhost:3001 (Grafana, по умолчанию `admin`/`admin`).
+2. Дашборд **AdRobot Logs** уже подключён к Loki.
+3. Для ручного запроса: `curl 'http://localhost:3100/loki/api/v1/query_range?query={app="adrobot"}'`.
+
+Просмотр логов в консоли:
+
+```bash
+docker compose logs -f backend worker   # JSON-строки structlog
 ```
 
 ## Примеры API-запросов

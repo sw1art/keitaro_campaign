@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 from uuid import UUID
 
@@ -13,10 +12,11 @@ from app.application.services.campaign_service import CampaignCreationService, u
 from app.config import Settings
 from app.domain.entities import Operation
 from app.infrastructure.keitaro import KeitaroClient
+from app.infrastructure.logging import get_logger
 from app.infrastructure.messaging import topology
 from app.infrastructure.repositories import Repositories, SqlOperationRepository
 
-logger = logging.getLogger(__name__)
+logger = get_logger("worker.handler")
 
 # Handler outcomes, mapped by the consumer to broker actions.
 ACK = "ack"

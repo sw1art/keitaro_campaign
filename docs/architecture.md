@@ -114,10 +114,16 @@ AdRobot are fully searchable and editable.
 
 ## Observability
 
+- **structlog**: every backend/worker line is structured JSON (`event`, `level`, `logger`,
+  `timestamp`, `correlation_id`, and contextual fields like `operation_id`/`stage`);
+  secrets are masked. Format is switchable via `LOG_FORMAT` (`json`/`console`).
 - Every request gets a `X-Request-ID` correlation id (echoed or generated) and an access
   log line (method, path, status, duration, correlation id).
 - Errors carry the correlation id in the response body and map to stable machine codes.
-- `GET /healthz` (liveness) and `GET /readyz` (DB/RabbitMQ/Keitaro readiness).
+- `GET /healthz` (liveness) and `GET /readyz` (DB/RabbitMQ/Keitaro readiness), plus
+  `/health/live`, `/health/ready`, `/health/keitaro`.
+- **Log aggregation**: Docker logs are shipped by Promtail to Loki and visualized in
+  Grafana (provisioned «AdRobot Logs» dashboard).
 
 ## Optimistic concurrency (stream editing)
 

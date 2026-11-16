@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     app_env: str = "dev"
     log_level: str = "INFO"
+    log_format: str = "json"  # "json" | "console"
 
     # --- Keitaro integration ---
     keitaro_base_url: str = "https://tlgk.host/admin_api/v1"
