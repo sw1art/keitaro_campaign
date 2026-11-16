@@ -31,6 +31,57 @@ Web-приложение для управления рекламными кам
 Подробнее: [docs/architecture.md](docs/architecture.md).
 Интеграция с Keitaro: [docs/keitaro-integration.md](docs/keitaro-integration.md).
 
+## Что сделано сверх ТЗ
+
+Исходное ТЗ требовало: FastAPI + SQLAlchemy (async), создание кампании с двумя
+потоками, редактор офферов с пересчётом долей, RabbitMQ + Worker + outbox, миграции,
+Docker Compose, тесты и README. Сверх этого реализовано:
+
+- **Аналитика (версия 1.1)** на базе Keitaro Custom Reports API (`POST /report/build`):
+  - дашборд с 13 метриками (clicks, unique clicks, conversions, leads, sales, rejected,
+    CR, cost, revenue, profit, ROI, EPC, CPA) и дельтами к прошлому периоду;
+  - графики динамики (Clicks/Conversions, Revenue/Cost/Profit, ROI, CR) по дням;
+  - аналитика отдельной кампании (потоки / офферы / GEO);
+  - **Offer Performance** — сравнение планового (`share`) и фактического распределения трафика;
+  - GEO-аналитика по странам;
+  - экспорт CSV.
+- **Saga для создания кампании** — этапы (`creating_campaign → creating_google_stream →
+  creating_offer_stream → verifying → completed`), статусы `partially_failed` / `needs_attention`,
+  прогресс по этапам, реконсилиация при таймауте (сначала проверяем, не создался ли объект).
+- **Безопасность**: опциональная API-аутентификация (`ADROBOT_API_TOKEN`), rate limiting,
+  security-заголовки, correlation-id, fail-fast при отсутствии секретов.
+- **Наблюдаемость**: `/healthz`, `/readyz` + `/health/live`, `/health/ready`, `/health/keitaro`,
+  логирование запросов с correlation-id, ошибки с correlation-id в теле ответа.
+- **Конкурентное редактирование**: optimistic concurrency (fingerprint офферов → `409`).
+- **Кэш справочников** (TTL 5 минут, ручной сброс `POST /dictionaries/refresh`, обход кэша при сохранении).
+- **Операции**: повтор упавшей (`POST /operations/{id}/retry`), аудит-лог, дашборд-эндпоинт.
+- **Расширенные фильтры/сортировка/пагинация** кампаний (домен, источник, группа; сортировка по всем колонкам).
+- **Тесты отказоустойчивости**: частичный сбой, повторная доставка, недоступность брокера, конфликт редактирования.
+- **Проверка и документирование реальных контрактов Keitaro** (в т.ч. Custom Reports) —
+  [docs/keitaro-integration.md](docs/keitaro-integration.md).
+
+## Паттерны и приёмы (и почему)
+
+| Приём | Зачем применён |
+|---|---|
+| **Clean Architecture** (domain / application / infrastructure / presentation) | Домен не зависит от FastAPI/SQLAlchemy/Keitaro — бизнес-правила тестируются изолированно, внешние системы заменяемы в тестах. |
+| **Adapter Pattern** (`KeitaroClient` + `campaign_builder`) | Вся работа с Keitaro и преобразование его моделей — в одном месте. Смена версии/полей API Keitaro — точечные правки в адаптере, а не по всему коду. |
+| **Repository Pattern** (порты в domain, реализации в infrastructure) | Сервисы не знают про ORM; в тестах подставляются SQLite/fake-репозитории. |
+| **Dependency Injection** (FastAPI `Depends` + явные зависимости сервисов) | Явные зависимости, нет глобального состояния, лёгкая тестируемость. |
+| **Transactional Outbox** | Операция и событие пишутся в одной транзакции БД, публикация в RabbitMQ — отдельно (best-effort + poller). Не теряем события при недоступности брокера. |
+| **Saga + идемпотентность + частичный результат** | Каждый этап сохраняет созданный ID. Повторная доставка/retry не создаёт дублей, частично выполненные операции сохраняются и дозавершаются. |
+| **Optimistic Concurrency** (fingerprint → `409`) | Предотвращает перезапись чужих правок без блокировок и без потери настроек потока. |
+| **Retry / DLQ** (`campaign.create` → `.retry` → `.dlq`) | Временные ошибки переживаются с повторными попытками; окончательно упавшие задачи изолируются и не блокируют очередь. |
+| **Кэширование с обходом на сохранении** (TTL + сброс + `fresh=True`) | Меньше запросов к Keitaro на чтение, но при сохранении всегда перепроверяем актуальное состояние. |
+| **Correlation ID + логирование запросов** | Сквозная трассировка запроса, диагностика ошибок по `X-Request-ID`. |
+| **Defense in depth** (валидация и на backend, и на frontend) | Frontend не доверяем — все бизнес-правила проверяются на сервере. |
+| **Keitaro как источник истины** | Списки/детали читаются напрямую из Keitaro; Postgres хранит только операции/историю/связи. Нет рассинхронизации, доступны и кампании, созданные вне AdRobot. |
+| **Event-driven для длительных операций** (RabbitMQ + Worker) | HTTP-запрос не блокируется длительным созданием; worker можно масштабировать отдельно. |
+| **Async I/O везде** (httpx, aio-pika, asyncpg, async SQLAlchemy) | Высокая пропускная способность при множестве внешних вызовов без блокировки event loop. |
+| **Pydantic v2 + единая форма ошибок** (`{error:{code,message,correlation_id}}`) | Строгий и предсказуемый контракт API. |
+| **Модульный монолит (не микросервисы)** | Один репозиторий/код с отдельным процессом Worker: простота деплоя без сетевых накладок микросервисов, при этом асинхронность сохранена. |
+| **«Сначала проверь контракты»** (задание §21) | До написания кода проверены реальные payload/ответы Keitaro и Custom Reports API; расхождения зафиксированы в документации. |
+
 ## Технологический стек
 
 - **Backend**: Python 3.12, FastAPI, SQLAlchemy 2 (async), asyncpg, Alembic, Pydantic v2, httpx, aio-pika.
