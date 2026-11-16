@@ -1,0 +1,26 @@
+{
+  "name": "adrobot-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AdRobot frontend — Nuxt 3 SPA for managing Keitaro campaigns",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "generate": "nuxt generate",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "nuxt": "^3.17.3",
+    "pinia": "^3.0.3"
+  },
+  "devDependencies": {
+    "@nuxtjs/tailwindcss": "^6.13.2",
+    "@types/node": "^22.15.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4",
+    "vue-tsc": "^2.2.10"
+  }
+}
